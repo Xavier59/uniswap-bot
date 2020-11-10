@@ -1,20 +1,20 @@
 import { Transaction } from "web3-eth";
 import { ITxMiddleware } from "./i_tx_middleware";
-import { ILogger } from "../../domain/services/i_logger";
-import { TxMethod } from "../../domain/value_types/type";
+import { ILoggerService } from "../../domain/services/i_logger_service";
+import { TransactionMethod } from "../../domain/value_types/transaction_method";
 
 export class AddDecodedMethodToTxMiddleware extends ITxMiddleware {
 
     #abiDecoder: any;
 
-    constructor(logger: ILogger, abiDecoder: any) {
+    constructor(logger: ILoggerService, abiDecoder: any) {
         super(logger);
         this.#abiDecoder = abiDecoder;
     }
 
     async dispatch(tx: Transaction): Promise<boolean> {
         // Decode uniswap contract methods
-        let txMethod: TxMethod = this.#abiDecoder.decodeMethod(tx.input);
+        let txMethod: TransactionMethod = this.#abiDecoder.decodeMethod(tx.input);
         if (!txMethod) {
             this.logger.addErrorForTx(tx.hash, `Failed to decode transaction ${tx.hash}`, 1);
             return false;
