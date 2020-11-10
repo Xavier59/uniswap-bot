@@ -1,6 +1,7 @@
 import Web3 from "web3";
 import { readFileSync } from "fs";
 import abiDecoder from "abi-decoder";
+import dotenv from "dotenv";
 
 import { TxListener } from "./application/tx_listener";
 import { TxService } from "./infrastructure/services/tx_service";
@@ -14,7 +15,8 @@ import { FilterUniswapTxMethodsMiddleware } from "./application/middlewares/filt
 import { FilterAlreadyMinedTxMiddleware } from "./application/middlewares/filter_already_mined_tx_middleware";
 import { AddDecodedMethodToTxMiddleware } from "./application/middlewares/add_decoded_method_to_tx_middleware";
 
-const privateNode: string = 'ws://86.192.162.56:8546/'
+// import env settings
+dotenv.config();
 
 const uniswapAddr: string = "0x7a250d5630b4cf539739df2c5dacb4c659f2488d";
 const uniswapABI = JSON.parse(readFileSync("./abi/UniswapV2Router02.abi.json").toString());
@@ -26,7 +28,7 @@ abiDecoder.addABI(customUniswapABI);
 
 const uniswapFactoryAddr = "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f"
 
-const web3 = new Web3(new Web3.providers.WebsocketProvider(privateNode));
+const web3 = new Web3(new Web3.providers.WebsocketProvider(`ws://${process.env.NODE_IP}:${process.env.NODE_PORT}`));
 const customContract = new web3.eth.Contract(customUniswapABI, customUniswapAddr);
 
 const transactionMethods: Array<String> = ["swapExactETHForTokens", "swapTokensForExactETH", "swapExactTokensForETH", "swapETHForExactTokens"];

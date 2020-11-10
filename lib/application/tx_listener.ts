@@ -21,7 +21,8 @@ export class TxListener {
 
     startListening(): void {
         this.#logger.logGeneralInfo("Subscribed to pending tx");
-        this.#sub.on("data", async (txHash: string) => {
+        this.#sub
+        .on("data", async (txHash: string) => {
             const tx = await this.#txService.getTxFromHash(txHash);
             if (tx == null) {
                 this.#logger.addErrorForTx(txHash, `Error while fetching the tx for ${txHash}`, 0);
@@ -30,7 +31,10 @@ export class TxListener {
                 await this.#txMiddlewareBus.dispatch(tx);
                 this.#logger.showLogsForTx(tx.hash);
             }
-        });
+        })
+        .on("error", (err: Object) => {
+            this.#logger.logGeneralInfo(`Error in tx subscription listener : ${err}`);
+        })
     }
 
     stopListening(): void {
