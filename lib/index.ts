@@ -34,14 +34,14 @@ const customContract = new web3.eth.Contract(customUniswapABI, customUniswapAddr
 const transactionMethods: Array<String> = ["swapExactETHForTokens", "swapTokensForExactETH", "swapExactTokensForETH", "swapETHForExactTokens"];
 
 const loggerOption = {
-    "logTxError": true,
-    "logTxInfo": true,
-    "logTxDebug": true,
-    "logTxSuccess": true,
-    "logGeneralInfo": true,
+    "logTxError": false,
+    "logTxInfo": false,
+    "logTxDebug": false,
+    "logTxSuccess": false,
+    "logGeneralInfo": false,
 }
 
-function main() {
+async function main() {
 
     // Basic logger for the bot
     let logger = new ConsoleLogger();
@@ -50,23 +50,24 @@ function main() {
     // Create a tx service class that implement utilities methods
     // used by several part of the application
     let txService = new TxService(web3, customContract, uniswapFactoryAddr);
+    await txService.init();
 
     // Create the bot that will dictate the main business decision rules
     let uniBot = new UniBot(txService, logger);
 
     // Create the tx filter to only forwar interesting tx to the bot
     let txMiddlewareBus = new TxMiddlewareBusBuilder()
-    .pushTxMiddleware(new TxDispatcherMiddleware(logger, uniBot))
-    .pushTxMiddleware(new FilterUniswapTxMethodsMiddleware(logger, transactionMethods))
-    .pushTxMiddleware(new AddDecodedMethodToTxMiddleware(logger, abiDecoder))
-    .pushTxMiddleware(new FilterOldTxMiddleware(logger, txService))
-    .pushTxMiddleware(new FilterAlreadyMinedTxMiddleware(logger))
-    .pushTxMiddleware(new FilterNonUniswapTxMiddleware(logger, uniswapAddr))
-    .build();
+        .pushTxMiddleware(new TxDispatcherMiddleware(logger, uniBot))
+        .pushTxMiddleware(new FilterUniswapTxMethodsMiddleware(logger, transactionMethods))
+        .pushTxMiddleware(new AddDecodedMethodToTxMiddleware(logger, abiDecoder))
+        .pushTxMiddleware(new FilterOldTxMiddleware(logger, txService))
+        .pushTxMiddleware(new FilterAlreadyMinedTxMiddleware(logger))
+        .pushTxMiddleware(new FilterNonUniswapTxMiddleware(logger, uniswapAddr))
+        .build();
 
     // Create a listener to notify the bot about incoming tx
     let txListener = new TxListener(web3, txMiddlewareBus, txService, logger);
-    
+
     txListener.startListening();
 }
 
