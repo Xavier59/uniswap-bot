@@ -14,6 +14,8 @@ import { FilterOldTxMiddleware } from "./application/middlewares/filter_old_tx_m
 import { FilterUniswapTxMethodsMiddleware } from "./application/middlewares/filter_uniswap_tx_methods_middleware";
 import { FilterAlreadyMinedTxMiddleware } from "./application/middlewares/filter_already_mined_tx_middleware";
 import { AddDecodedMethodToTxMiddleware } from "./application/middlewares/add_decoded_method_to_tx_middleware";
+import Database from "./infrastructure/services/database";
+import { TokenService } from "./infrastructure/services/token_service";
 
 // import env settings
 dotenv.config();
@@ -34,11 +36,11 @@ const customContract = new web3.eth.Contract(customUniswapABI, customUniswapAddr
 const transactionMethods: Array<String> = ["swapExactETHForTokens", "swapTokensForExactETH", "swapExactTokensForETH", "swapETHForExactTokens"];
 
 const loggerOption = {
-    "logTxError": false,
-    "logTxInfo": false,
-    "logTxDebug": false,
-    "logTxSuccess": false,
-    "logGeneralInfo": false,
+    "logTxError": true,
+    "logTxInfo": true,
+    "logTxDebug": true,
+    "logTxSuccess": true,
+    "logGeneralInfo": true,
 }
 
 async function main() {
@@ -46,6 +48,14 @@ async function main() {
     // Basic logger for the bot
     let logger = new ConsoleLogger();
     logger.configure(loggerOption);
+
+    // connect to database
+    try{
+        await Database.connectDatabase(`mongodb://${process.env.MONGO_IP}:${process.env.MONGO_PORT}/`, process.env.DBNAME);
+    }catch(e){
+        logger.logGeneralInfo(`Couldn't connect to database, got error : ${e}`);
+        return;
+    }
 
     // Create a tx service class that implement utilities methods
     // used by several part of the application
@@ -57,17 +67,17 @@ async function main() {
 
     // Create the tx filter to only forwar interesting tx to the bot
     let txMiddlewareBus = new TxMiddlewareBusBuilder()
-        .pushTxMiddleware(new TxDispatcherMiddleware(logger, uniBot))
-        .pushTxMiddleware(new FilterUniswapTxMethodsMiddleware(logger, transactionMethods))
-        .pushTxMiddleware(new AddDecodedMethodToTxMiddleware(logger, abiDecoder))
-        .pushTxMiddleware(new FilterOldTxMiddleware(logger, txService))
-        .pushTxMiddleware(new FilterAlreadyMinedTxMiddleware(logger))
-        .pushTxMiddleware(new FilterNonUniswapTxMiddleware(logger, uniswapAddr))
-        .build();
+    .pushTxMiddleware(new TxDispatcherMiddleware(logger, uniBot))
+    .pushTxMiddleware(new FilterUniswapTxMethodsMiddleware(logger, transactionMethods))
+    .pushTxMiddleware(new AddDecodedMethodToTxMiddleware(logger, abiDecoder))
+    .pushTxMiddleware(new FilterOldTxMiddleware(logger, txService))
+    .pushTxMiddleware(new FilterAlreadyMinedTxMiddleware(logger))
+    .pushTxMiddleware(new FilterNonUniswapTxMiddleware(logger, uniswapAddr))
+    .build();
 
     // Create a listener to notify the bot about incoming tx
     let txListener = new TxListener(web3, txMiddlewareBus, txService, logger);
-
+    
     txListener.startListening();
 }
 
