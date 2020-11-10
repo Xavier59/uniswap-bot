@@ -1,6 +1,6 @@
 import { Transaction } from "web3-eth"
 import BN from "bn.js";
-import { TxPairReserves } from "../value_types/type";
+import { TransactionPairReserves } from "../value_types/transaction_pair_reserves";
 
 export interface ITxService {
 
@@ -18,8 +18,11 @@ export interface ITxService {
     getEthPrice(): Promise<BN>;
 
     // Return the associated reserve from the tokens pair addresses
-    getReserve(reserveIn: string, reserveOut: string): Promise<TxPairReserves>;
+    getReserve(reserveIn: string, reserveOut: string): Promise<TransactionPairReserves>;
 
     // Return a tx from its hash
     getTxFromHash(txHash: string): Promise<Transaction>;
+
+    // Return a raw transaction from its hash
+    getRawTxFromHash(txHash: string): Promise<any>;
 }

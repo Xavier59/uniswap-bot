@@ -3,7 +3,8 @@ import Web3 from "web3";
 import { Transaction } from "web3-eth"
 import { Contract } from "web3-eth-contract"
 import { ITxService } from "../../domain/services/i_tx_service";
-import { TxPairReserves } from "../../domain/value_types/type";
+import { RawTransaction } from "../../domain/value_types/raw_transaction";
+import { TransactionPairReserves } from "../../domain/value_types/transaction_pair_reserves";
 
 export class TxService implements ITxService {
 
@@ -24,9 +25,17 @@ export class TxService implements ITxService {
             this.#gasPrice = await this._fetchGasPrice();
             console.log("New gasPrice : " + this.#gasPrice);
         }, 10000);
+
     }
 
     async init(): Promise<void> {
+        this.#web3.eth.extend({
+            methods: [{
+                name: "getRawTransaction",
+                call: "eth_getRawTransactionByHash",
+                params: 1
+            }]
+        });
         this.#gasPrice = await this._fetchGasPrice();
     }
 
@@ -39,10 +48,15 @@ export class TxService implements ITxService {
     }
 
     async getTxFromHash(txHash: string): Promise<Transaction> {
+        await this.getRawTxFromHash(txHash);
         return await this.#web3.eth.getTransaction(txHash);
     }
 
-    async getReserve(reserveIn: string, reserveOut: string): Promise<TxPairReserves> {
+    async getRawTxFromHash(txHash: string): Promise<RawTransaction> {
+        return await this.#web3.eth["getRawTransaction"](txHash);
+    }
+
+    async getReserve(reserveIn: string, reserveOut: string): Promise<TransactionPairReserves> {
         return await this.#customContract.methods.getReserves(this.#uniswapFactoryAddr, reserveIn, reserveOut).call();
     }
 

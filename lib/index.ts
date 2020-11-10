@@ -15,11 +15,14 @@ import { FilterUniswapTxMethodsMiddleware } from "./application/middlewares/filt
 import { FilterAlreadyMinedTxMiddleware } from "./application/middlewares/filter_already_mined_tx_middleware";
 import { AddDecodedMethodToTxMiddleware } from "./application/middlewares/add_decoded_method_to_tx_middleware";
 import Database from "./infrastructure/services/database";
-import { TokenService } from "./infrastructure/services/token_service";
+import { SimulationBoxBuilder } from "./infrastructure/factories/simulation_builder";
 
 // import env settings
 dotenv.config();
 
+const privateNode = `ws://${process.env.NODE_IP}:${process.env.NODE_PORT}`;
+
+const uniswapFactoryAddr = "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f"
 const uniswapAddr: string = "0x7a250d5630b4cf539739df2c5dacb4c659f2488d";
 const uniswapABI = JSON.parse(readFileSync("./abi/UniswapV2Router02.abi.json").toString());
 abiDecoder.addABI(uniswapABI);
@@ -28,19 +31,17 @@ const customUniswapAddr: string = "0x1a9Cf3237266cfc034A710Fa7ACF89b4c325bFB7";
 const customUniswapABI = JSON.parse(readFileSync("./abi/CustomUniswap.abi.json").toString());
 abiDecoder.addABI(customUniswapABI);
 
-const uniswapFactoryAddr = "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f"
-
-const web3 = new Web3(new Web3.providers.WebsocketProvider(`ws://${process.env.NODE_IP}:${process.env.NODE_PORT}`));
-const customContract = new web3.eth.Contract(customUniswapABI, customUniswapAddr);
+const web3 = new Web3(new Web3.providers.WebsocketProvider(privateNode));
+const customMainNetContract = new web3.eth.Contract(customUniswapABI, customUniswapAddr);
 
 const transactionMethods: Array<String> = ["swapExactETHForTokens", "swapTokensForExactETH", "swapExactTokensForETH", "swapETHForExactTokens"];
 
 const loggerOption = {
-    "logTxError": true,
-    "logTxInfo": true,
+    "logTxError": false,
+    "logTxInfo": false,
     "logTxDebug": true,
     "logTxSuccess": true,
-    "logGeneralInfo": true,
+    "logGeneralInfo": false,
 }
 
 async function main() {
@@ -59,11 +60,14 @@ async function main() {
 
     // Create a tx service class that implement utilities methods
     // used by several part of the application
-    let txService = new TxService(web3, customContract, uniswapFactoryAddr);
+    let txService = new TxService(web3, customMainNetContract, uniswapFactoryAddr);
     await txService.init();
 
+    // Create a simulation box builder 
+    let simulationBoxBuilder = new SimulationBoxBuilder(privateNode, uniswapFactoryAddr, customUniswapABI, customUniswapAddr);
+
     // Create the bot that will dictate the main business decision rules
-    let uniBot = new UniBot(txService, logger);
+    let uniBot = new UniBot(txService, simulationBoxBuilder, logger);
 
     // Create the tx filter to only forwar interesting tx to the bot
     let txMiddlewareBus = new TxMiddlewareBusBuilder()

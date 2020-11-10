@@ -1,7 +1,7 @@
 import Web3 from "web3";
 import { Subscription } from "web3-core-subscriptions";
 
-import { ILogger } from "../domain/services/i_logger";
+import { ILoggerService } from "../domain/services/i_logger_service";
 import { ITxService } from "../domain/services/i_tx_service";
 import { ITxMiddleware } from "./middlewares/i_tx_middleware";
 
@@ -10,9 +10,9 @@ export class TxListener {
     #txService: ITxService;
     #txMiddlewareBus: ITxMiddleware;
     #sub: Subscription<string>;
-    #logger: ILogger;
+    #logger: ILoggerService;
 
-    constructor(web3: Web3, txMiddlewareBus: ITxMiddleware, txService: ITxService, logger: ILogger) {
+    constructor(web3: Web3, txMiddlewareBus: ITxMiddleware, txService: ITxService, logger: ILoggerService) {
         this.#txMiddlewareBus = txMiddlewareBus;
         this.#sub = web3.eth.subscribe("pendingTransactions");
         this.#txService = txService;
