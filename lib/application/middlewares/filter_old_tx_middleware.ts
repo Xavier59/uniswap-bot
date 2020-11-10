@@ -23,6 +23,7 @@ export class FilterOldTxMiddleware extends ITxMiddleware {
             return false;
         }
 
+
         return await this.next!.dispatch(tx);
 
     }
