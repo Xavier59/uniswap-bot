@@ -1,12 +1,12 @@
 import TokenRepository from "../repository/token_repository";
-import { DbToken } from "../../domain/value_types/dbtoken";
+import { ITokenService } from "../../domain/services/i_token_service";
 
-export class TokenService {
+export class TokenService implements ITokenService {
 
     #tr: TokenRepository;
 
-    constructor(){
-       this.#tr = new TokenRepository();
+    constructor() {
+        this.#tr = new TokenRepository();
     }
 
     async isAllowlisted(address: string): Promise<boolean> {
