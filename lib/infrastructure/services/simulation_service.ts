@@ -35,7 +35,7 @@ export class SimulationService implements ISimulationService {
     async sendRawTransaction(
         tx: RawTransaction
     ): Promise<void> {
-        await this.#web3Ganache.eth.sendSignedTransaction(tx);
+        this.#web3Ganache.eth.sendSignedTransaction(tx);
     }
 
     async sendBuiltTransaction(
@@ -52,7 +52,7 @@ export class SimulationService implements ISimulationService {
             process.env.ETH_PRIVATE_KEY!
         );
 
-        await this.#web3Ganache.eth.sendSignedTransaction(signedTransaction.rawTransaction!);
+        this.#web3Ganache.eth.sendSignedTransaction(signedTransaction.rawTransaction!);
     }
 
 }

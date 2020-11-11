@@ -64,19 +64,25 @@ export class TransactionFactory implements ITransactionFactory {
         method: UniswapMethods,
         methodParams: BuiltTransactionMethodParams
     ): BuiltTransaction {
-        throw Error("TODO");
+
+        let uniswapContract: Contract;
+
         switch (txType) {
             case TransactionType.onMainNet:
-
+                uniswapContract = this.#mainNetUniswapContract;
                 break;
 
             case TransactionType.onGanache:
-
+                uniswapContract = this.#ganacheUniswapContract;
                 break;
 
             default:
+                uniswapContract = this.#ganacheUniswapContract;
                 break;
         }
+
+        let tx = uniswapContract.methods[method](...methodParams);
+        return tx;
     }
 
 }

@@ -21,8 +21,8 @@ export interface ITransactionService {
 
     // Return the associated reserve from the tokens pair addresses
     getReserve(
-        reserveIn: string,
-        reserveOut: string
+        reserveInAddr: string,
+        reserveOutAddr: string
     ): Promise<TransactionPairReserves>;
 
     // Return a tx from its hash

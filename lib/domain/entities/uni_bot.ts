@@ -6,7 +6,7 @@ import { ParsedTransactionMethod } from "../value_types/parsed_transaction_metho
 import { TransactionPairReserves } from "../value_types/transaction_pair_reserves";
 import BN from "bignumber.js";
 import { ISimulationBoxBuilder } from "../factories/i_simulation_box_builder";
-import { ERC20Methods, ITransactionFactory, TransactionType } from "../factories/i_transaction_factory";
+import { ERC20Methods, ITransactionFactory, TransactionType, UniswapMethods } from "../factories/i_transaction_factory";
 import { UNISWAP_CONTRACT_ADDR } from "../../config";
 import { BuiltTransaction } from "../value_types/built_transaction";
 
@@ -54,22 +54,22 @@ export class UniBot {
         // Réinsérer sa tx
         // Réinsérer notre 2e tx
         // Check si on a bien récupérer notre argent
-        let res = await this._simulateSandwichAttack(
+        let reservesOuts = await this._simulateSandwichAttack(
             new BN(victimTx.gasPrice),
             rawVictimTx,
             path[0],
             path[1]
         );
-        this.#logger.addDebugForTx(victimTx.hash, `RESERVE IMPACT AFTER SIMULATION: ${priceImpact} %`, 1);
-        this.#logger.consumeLogsForTx(victimTx.hash);
 
+        this.#logger.addDebugForTx(victimTx.hash, `RESERVE IMPACT AFTER SIMULATION: ${JSON.stringify(reservesOuts)} %`, 1);
+        this.#logger.consumeLogsForTx(victimTx.hash);
     }
 
     private async _getReserve(
-        reserveIn: string,
-        reserveOut: string
+        reserveInAddr: string,
+        reserveOutAddr: string
     ): Promise<TransactionPairReserves> {
-        return await this.#txService.getReserve(reserveIn, reserveOut);
+        return await this.#txService.getReserve(reserveInAddr, reserveOutAddr);
     }
 
     private async _getReserveAfterVictimTx(
@@ -85,8 +85,8 @@ export class UniBot {
     private async _simulateSandwichAttack(
         victimGasPrice: BN,
         victimTx: RawTransaction,
-        reserveIn: string,
-        reserveOut: string,
+        reserveInAddr: string,
+        reserveOutAddr: string,
     ): Promise<TransactionPairReserves> {
 
         let currentNonce = this.#txService.getCurrentNonce();
@@ -94,13 +94,37 @@ export class UniBot {
         // Approval transaction
         let approveTx: BuiltTransaction = this.#transactionfactory.createErc20Transaction(
             TransactionType.onGanache,
-            reserveOut,
+            reserveOutAddr,
             ERC20Methods.approve,
             [
-                UNISWAP_CONTRACT_ADDR,
-                "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+                UNISWAP_CONTRACT_ADDR,                                                                  // Uniswap contract
+                "115792089237316195423570985008687907853269984665640564039457584007913129639935"        // UNIT256MAX -1
             ]
         );
+
+        let buyTx = this.#transactionfactory.createUniswapTransaction(
+            TransactionType.onGanache,
+            UniswapMethods.swapETHForExactTokens,
+            [
+                1,                                                          // amoutTokenOut
+                [reserveInAddr, reserveOutAddr],                            // Pair
+                process.env.ETH_PUBLIC_KEY,                                 // Wallet
+                Math.floor(new Date().getTime() / 1000) + 180               // Timestamp
+            ]
+        );
+
+        let sellTx = this.#transactionfactory.createUniswapTransaction(
+            TransactionType.onGanache,
+            UniswapMethods.swapExactTokensForETH,
+            [
+                1,                                                          // amountIn
+                0,                                                          // amountOutMin
+                [reserveOutAddr, reserveInAddr],                            // Pairs
+                process.env.ETH_PUBLIC_KEY,                                 // Wallet
+                Math.floor(new Date().getTime() / 1000) + 180               // Timestamp
+            ]
+        );
+
         let simulationBox = this.#simulationBoxBuilder
             .copy()
             .addTx({
@@ -110,13 +134,35 @@ export class UniBot {
                     gas: 60000,
                     gasPrice: victimGasPrice.plus(10000001),
                     nonce: currentNonce + 1,
+                    to: reserveOutAddr,
                 },
             })
+            .addTx({
+                transaction: buyTx,
+                sendParams: {
+                    from: process.env.ETH_PUBLIC_KEY!,
+                    gas: 250000,
+                    gasPrice: victimGasPrice.plus(10000000),
+                    value: 10000000,
+                    nonce: currentNonce + 2,
+                    to: UNISWAP_CONTRACT_ADDR,
+                }
+            })
             .addTx(victimTx)
+            .addTx({
+                transaction: sellTx,
+                sendParams: {
+                    from: process.env.ETH_PUBLIC_KEY!,
+                    gas: 250000,
+                    gasPrice: victimGasPrice,
+                    nonce: currentNonce + 3,
+                    to: UNISWAP_CONTRACT_ADDR,
+                }
+            })
             .build();
 
         await simulationBox.simulate();
-        return await simulationBox.getSimulationReserves(reserveIn, reserveOut);
+        return await simulationBox.getSimulationReserves(reserveInAddr, reserveOutAddr);
     }
 
 }
