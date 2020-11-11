@@ -1,10 +1,10 @@
-export interface TokenService {
+export interface ITokenService {
 
-    isAllowlisted(address: string): boolean;
-    
-    isBlocklisted(address: string): boolean;
+    isAllowlisted(address: string): Promise<boolean>;
+
+    isBlocklisted(address: string): Promise<boolean>;
 
     // has the token be approved for transfer from uniswap smartcontract ?
-    isApproved(address: string): boolean;
+    isApproved(address: string): Promise<boolean>;
 
 }
