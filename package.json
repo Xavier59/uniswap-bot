@@ -1,23 +1,25 @@
 {
-  "name": "uniswap_bot",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
-  "scripts": {
-    "start": "node dist/index.js",
-    "dev": "tsc -w -p ."
-  },
-  "author": "",
-  "license": "ISC",
-  "dependencies": {
-    "@types/web3": "^1.2.2",
-    "abi-decoder": "^2.3.0",
-    "bn": "^1.0.5",
-    "dotenv": "^8.2.0",
-    "ganache-core": "^2.13.1",
-    "typescript": "^4.0.5",
-    "web3": "^1.3.0",
-    "web3-core-subscriptions": "^1.3.0",
-    "web3-eth-contract": "^1.3.0"
-  }
+    "name": "uniswap_bot",
+    "version": "1.0.0",
+    "description": "",
+    "main": "index.js",
+    "scripts": {
+        "start": "node dist/index.js",
+        "dev": "tsc -w -p ."
+    },
+    "author": "",
+    "license": "ISC",
+    "dependencies": {
+        "@types/mongodb": "^3.5.33",
+        "@types/web3": "^1.2.2",
+        "abi-decoder": "^2.3.0",
+        "bn": "^1.0.5",
+        "dotenv": "^8.2.0",
+        "ganache-core": "^2.13.1",
+        "mongodb": "^3.6.3",
+        "typescript": "^4.0.5",
+        "web3": "^1.3.0",
+        "web3-core-subscriptions": "^1.3.0",
+        "web3-eth-contract": "^1.3.0"
+    }
 }

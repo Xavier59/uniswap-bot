@@ -1,22 +1,29 @@
 import { Transaction } from "web3-eth"
-import { ISimulationBoxBuilder } from "../factories/i_simulation_box_builder";
 import { ILoggerService } from "../services/i_logger_service";
-import { ITxService } from "../services/i_tx_service";
+import { ITransactionService } from "../services/i_transaction_service";
 import { RawTransaction } from "../value_types/raw_transaction";
 import { TransactionMethod } from "../value_types/transaction_method";
 import { TransactionPairReserves } from "../value_types/transaction_pair_reserves";
-import BN from "bn.js";
+import BN from "bignumber.js";
+import { SimulationBoxBuilder } from "../../infrastructure/factories/simulation_builder";
 
 export class UniBot {
 
-    #txService: ITxService;
+    #txService: ITransactionService;
     #logger: ILoggerService;
-    #simulationBoxBuilder: ISimulationBoxBuilder;
+    #nodeUrl: string;
+    #uniswapFactoryAddr: string;
+    #customUniswapABI: Object;
+    #customUniswapAddr: string;
 
-    constructor(txService: ITxService, simulationBoxBuilder: ISimulationBoxBuilder, logger: ILoggerService) {
+
+    constructor(txService: ITransactionService, logger: ILoggerService, nodeUrl: string, uniswapFactoryAddr: string, customUniswapABI: any, customUniswapAddr: string) {
         this.#txService = txService;
         this.#logger = logger;
-        this.#simulationBoxBuilder = simulationBoxBuilder;
+        this.#nodeUrl = nodeUrl;
+        this.#uniswapFactoryAddr = uniswapFactoryAddr;
+        this.#customUniswapABI = customUniswapABI;
+        this.#customUniswapAddr = customUniswapAddr;
     }
 
     async processTx(tx: Transaction) {
@@ -37,12 +44,13 @@ export class UniBot {
         let reserveOutBefore = new BN(reserveBeforeVictimTx.reserveB);
         let reserveOutAfter = new BN(reserveAfterVictimTx.reserveB);
 
-        let priceImpact = reserveOutAfter.sub(reserveOutBefore).div(reserveOutBefore).muln(100);
-        this.#logger.addDebugForTx(tx.hash, `PRICE IMPACT: ${priceImpact}`, 1);
-
+        let priceImpact = reserveOutAfter.minus(reserveOutBefore).div(reserveOutBefore).times(100);
+        this.#logger.addDebugForTx(tx.hash, `Reserve impact: ${priceImpact} %`, 1);
 
         // Simulate attack sandwich
 
+
+        // Replay in real
     }
 
     private async _getReserve(reserveIn: string, reserveOut: string): Promise<TransactionPairReserves> {
@@ -50,7 +58,7 @@ export class UniBot {
     }
 
     private async _getReserveAfterVictimTx(tx: RawTransaction, reserveIn: string, reserveOut: string): Promise<TransactionPairReserves> {
-        let simulationBox = this.#simulationBoxBuilder.addTx(tx).build();
+        let simulationBox = new SimulationBoxBuilder(this.#nodeUrl, this.#uniswapFactoryAddr, this.#customUniswapABI, this.#customUniswapAddr).addTx(tx).build();
         await simulationBox.simulate();
         return await simulationBox.getSimulationReserves(reserveIn, reserveOut);
     }

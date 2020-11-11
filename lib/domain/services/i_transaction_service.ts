@@ -2,7 +2,7 @@ import { Transaction } from "web3-eth"
 import BN from "bn.js";
 import { TransactionPairReserves } from "../value_types/transaction_pair_reserves";
 
-export interface ITxService {
+export interface ITransactionService {
 
     // Convert wei to ETH
     convertToEth(wei: string): string;

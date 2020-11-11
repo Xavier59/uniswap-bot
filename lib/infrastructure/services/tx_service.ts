@@ -2,11 +2,11 @@ import BN from "bn.js";
 import Web3 from "web3";
 import { Transaction } from "web3-eth"
 import { Contract } from "web3-eth-contract"
-import { ITxService } from "../../domain/services/i_tx_service";
+import { ITransactionService } from "../../domain/services/i_transaction_service";
 import { RawTransaction } from "../../domain/value_types/raw_transaction";
 import { TransactionPairReserves } from "../../domain/value_types/transaction_pair_reserves";
 
-export class TxService implements ITxService {
+export class TransactionService implements ITransactionService {
 
     #web3: Web3;
     #uniswapFactoryAddr: string;
@@ -23,7 +23,6 @@ export class TxService implements ITxService {
         // Maybe store for clearInterval ?
         setInterval(async () => {
             this.#gasPrice = await this._fetchGasPrice();
-            console.log("New gasPrice : " + this.#gasPrice);
         }, 10000);
 
     }

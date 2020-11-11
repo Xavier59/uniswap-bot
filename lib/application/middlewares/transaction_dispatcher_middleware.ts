@@ -1,10 +1,9 @@
 import { Transaction } from "web3-eth";
-import { ITxMiddleware } from "./i_tx_middleware";
+import { ITransactionMiddleware } from "./i_transaction_middleware";
 import { ILoggerService } from "../../domain/services/i_logger_service";
-import BN from "bignumber.js";
 import { UniBot } from "../../domain/entities/uni_bot";
 
-export class TxDispatecherMiddleware extends ITxMiddleware {
+export class TransactionDispatecherMiddleware extends ITransactionMiddleware {
 
     #uniBot: UniBot;
 

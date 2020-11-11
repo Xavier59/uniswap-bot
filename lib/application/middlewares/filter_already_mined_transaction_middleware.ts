@@ -1,8 +1,8 @@
 import { Transaction } from "web3-eth";
-import { ITxMiddleware } from "./i_tx_middleware";
+import { ITransactionMiddleware } from "./i_transaction_middleware";
 import { ILoggerService } from "../../domain/services/i_logger_service";
 
-export class FilterAlreadyMinedTxMiddleware extends ITxMiddleware {
+export class FilterAlreadyMinedTxMiddleware extends ITransactionMiddleware {
 
     constructor(logger: ILoggerService) {
         super(logger);

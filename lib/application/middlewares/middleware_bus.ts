@@ -1,14 +1,14 @@
-import { ITxMiddleware } from "./i_tx_middleware";
+import { ITransactionMiddleware } from "./i_transaction_middleware";
 
-export class TxMiddlewareBusBuilder {
-    #txMiddlewareBus: ITxMiddleware | null
+export class TransactionMiddlewareBusBuilder {
+    #txMiddlewareBus: ITransactionMiddleware | null
 
     constructor() {
         this.#txMiddlewareBus = null;
     }
 
-    pushTxMiddleware(txMiddleware: ITxMiddleware): TxMiddlewareBusBuilder {
-        if(this.#txMiddlewareBus === null) {
+    pushTxMiddleware(txMiddleware: ITransactionMiddleware): TransactionMiddlewareBusBuilder {
+        if (this.#txMiddlewareBus === null) {
             this.#txMiddlewareBus = txMiddleware;
         } else {
             txMiddleware.setNext(this.#txMiddlewareBus);
@@ -17,7 +17,7 @@ export class TxMiddlewareBusBuilder {
         return this;
     }
 
-    build(): ITxMiddleware {
+    build(): ITransactionMiddleware {
         return this.#txMiddlewareBus!;
     }
 }

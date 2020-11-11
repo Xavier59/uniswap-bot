@@ -1,8 +1,8 @@
 import { Transaction } from "web3-eth";
-import { ITxMiddleware } from "./i_tx_middleware";
+import { ITransactionMiddleware } from "./i_transaction_middleware";
 import { ILoggerService } from "../../domain/services/i_logger_service";
 
-export class FilterNonUniswapTxMiddleware extends ITxMiddleware {
+export class FilterNonUniswapTxMiddleware extends ITransactionMiddleware {
 
     #uniswapAddr: string;
 

@@ -1,14 +1,14 @@
 import { Transaction } from "web3-eth";
-import { ITxMiddleware } from "./i_tx_middleware";
+import { ITransactionMiddleware } from "./i_transaction_middleware";
 import { ILoggerService } from "../../domain/services/i_logger_service";
 import BN from "bn.js";
-import { ITxService } from "../../domain/services/i_tx_service";
+import { ITransactionService } from "../../domain/services/i_transaction_service";
 
-export class FilterOldTxMiddleware extends ITxMiddleware {
+export class FilterOldTxMiddleware extends ITransactionMiddleware {
 
-    #txService: ITxService;
+    #txService: ITransactionService;
 
-    constructor(logger: ILoggerService, txService: ITxService) {
+    constructor(logger: ILoggerService, txService: ITransactionService) {
         super(logger);
         this.#txService = txService;
     }

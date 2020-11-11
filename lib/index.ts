@@ -3,17 +3,17 @@ import { readFileSync } from "fs";
 import abiDecoder from "abi-decoder";
 import dotenv from "dotenv";
 
-import { TxListener } from "./application/tx_listener";
-import { TxService } from "./infrastructure/services/tx_service";
+import { TxListener } from "./application/transaction_listener";
+import { TransactionService } from "./infrastructure/services/tx_service";
 import { UniBot } from "./domain/entities/uni_bot"
 import { ConsoleLogger } from "./infrastructure/services/console_logger";
-import { TxMiddlewareBusBuilder } from "./application/middlewares/middleware_bus";
-import { TxDispatecherMiddleware as TxDispatcherMiddleware } from "./application/middlewares/tx_dispatcher_middleware";
-import { FilterNonUniswapTxMiddleware } from "./application/middlewares/filter_non_uniswap_tx_middleware";
-import { FilterOldTxMiddleware } from "./application/middlewares/filter_old_tx_middleware";
-import { FilterUniswapTxMethodsMiddleware } from "./application/middlewares/filter_uniswap_tx_methods_middleware";
-import { FilterAlreadyMinedTxMiddleware } from "./application/middlewares/filter_already_mined_tx_middleware";
-import { AddDecodedMethodToTxMiddleware } from "./application/middlewares/add_decoded_method_to_tx_middleware";
+import { TransactionMiddlewareBusBuilder } from "./application/middlewares/middleware_bus";
+import { TransactionDispatecherMiddleware } from "./application/middlewares/transaction_dispatcher_middleware";
+import { FilterNonUniswapTxMiddleware } from "./application/middlewares/filter_non_uniswap_transaction_middleware";
+import { FilterOldTxMiddleware } from "./application/middlewares/filter_old_transaction_middleware";
+import { FilterUniswapTxMethodsMiddleware } from "./application/middlewares/filter_uniswap_transaction_methods_middleware";
+import { FilterAlreadyMinedTxMiddleware } from "./application/middlewares/filter_already_mined_transaction_middleware";
+import { AddDecodedMethodToTxMiddleware } from "./application/middlewares/add_decoded_method_to_transaction_middleware";
 import { SimulationBoxBuilder } from "./infrastructure/factories/simulation_builder";
 
 // import env settings
@@ -51,18 +51,16 @@ async function main() {
 
     // Create a tx service class that implement utilities methods
     // used by several part of the application
-    let txService = new TxService(web3, customMainNetContract, uniswapFactoryAddr);
+    let txService = new TransactionService(web3, customMainNetContract, uniswapFactoryAddr);
     await txService.init();
 
-    // Create a simulation box builder 
-    let simulationBoxBuilder = new SimulationBoxBuilder(privateNode, uniswapFactoryAddr, customUniswapABI, customUniswapAddr);
 
     // Create the bot that will dictate the main business decision rules
-    let uniBot = new UniBot(txService, simulationBoxBuilder, logger);
+    let uniBot = new UniBot(txService, logger, privateNode, uniswapFactoryAddr, customUniswapABI, customUniswapAddr);
 
     // Create the tx filter to only forwar interesting tx to the bot
-    let txMiddlewareBus = new TxMiddlewareBusBuilder()
-        .pushTxMiddleware(new TxDispatcherMiddleware(logger, uniBot))
+    let txMiddlewareBus = new TransactionMiddlewareBusBuilder()
+        .pushTxMiddleware(new TransactionDispatecherMiddleware(logger, uniBot))
         .pushTxMiddleware(new FilterUniswapTxMethodsMiddleware(logger, transactionMethods))
         .pushTxMiddleware(new AddDecodedMethodToTxMiddleware(logger, abiDecoder))
         .pushTxMiddleware(new FilterOldTxMiddleware(logger, txService))

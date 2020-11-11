@@ -1,9 +1,9 @@
 import { Transaction } from "web3-eth";
-import { ITxMiddleware } from "./i_tx_middleware";
+import { ITransactionMiddleware } from "./i_transaction_middleware";
 import { ILoggerService } from "../../domain/services/i_logger_service";
 import { TransactionMethod } from "../../domain/value_types/transaction_method";
 
-export class FilterUniswapTxMethodsMiddleware extends ITxMiddleware {
+export class FilterUniswapTxMethodsMiddleware extends ITransactionMiddleware {
 
     #txMethods: Array<String>;
 
