@@ -7,7 +7,7 @@ import { TransactionPairReserves } from "../value_types/transaction_pair_reserve
 import BN from "bignumber.js";
 import { ISimulationBoxBuilder } from "../factories/i_simulation_box_builder";
 import { ERC20Methods, ITransactionFactory, TransactionType, UniswapMethods } from "../factories/i_transaction_factory";
-import { UNISWAP_CONTRACT_ADDR } from "../../config";
+import { MAX_ETH_INVEST, UNISWAP_CONTRACT_ADDR } from "../../config";
 import { BuiltTransaction } from "../value_types/built_transaction";
 
 export class UniBot {
@@ -32,12 +32,11 @@ export class UniBot {
     async processTx(
         victimTx: Web3_Transaction
     ) {
-        this.#logger.addInfoForTx(victimTx.hash, `Tx ${victimTx.hash} received by the bot`, 1);
+        this.#logger.addDebugForTx(victimTx.hash, `Tx ${victimTx.hash} received by the bot`, 1);
 
         // Call get reserve custom amoutIn amoutOut
         let txMethod: ParsedTransactionMethod = victimTx["decodedMethod"];
         let path = txMethod.params.find(txParam => txParam.name == "path")!.value;
-        this.#logger.addDebugForTx(victimTx.hash, `Path: ${JSON.stringify(path)}`, 1);
 
         // Compute price impact
         let reserveBeforeVictimTx = await this._getReserve(path[0], path[1]);
@@ -48,17 +47,54 @@ export class UniBot {
         let priceImpact = reserveOutAfter.minus(reserveOutBefore).div(reserveOutBefore).times(100);
         this.#logger.addDebugForTx(victimTx.hash, `Reserve impact: ${priceImpact} %`, 1);
 
-        // Simulate on ganache
-        let previousBalance = await this._getGanacheBalance();
-        let newBalance = await this._simulateSandwichAttack(
-            new BN(victimTx.gasPrice),
-            rawVictimTx,
-            path[0],
-            path[1]
+        // Compute eth to invest to make a worthy trade
+        let decodedTxMethod: ParsedTransactionMethod = victimTx["decodedMethod"];
+        let amountOutMin = new BN(decodedTxMethod.params.find(txParam => txParam.name === "amountOutMin")!.value as string);
+        let amountIn = new BN(victimTx.value);
+        let reserveIn = new BN(reserveBeforeVictimTx.reserveA);
+        let reserveOut = new BN(reserveBeforeVictimTx.reserveB);
+
+        let maxInvestAmount = this._getMaxAmountIn(
+            reserveIn,
+            reserveOut,
+            amountIn,
+            amountOutMin
         );
 
-        this.#logger.addDebugForTx(victimTx.hash, `Balance before attack: ${previousBalance}`, 1);
-        this.#logger.addDebugForTx(victimTx.hash, `Balance after attack: ${newBalance}`, 1);
+        this.#logger.addDebugForTx(victimTx.hash, `Calculated eth invest: ${maxInvestAmount}`, 1);
+
+        if (maxInvestAmount.gt(new BN(MAX_ETH_INVEST))) {
+            this.#logger.addErrorForTx(victimTx.hash, `Invest amount to high`, 1)
+        } else {
+
+            // Compute how many token we can get for the eth amount invested
+            let maxTokenToBuy = this._getAmountOut(
+                maxInvestAmount,
+                reserveIn,
+                reserveOut
+            );
+
+            this.#logger.addDebugForTx(victimTx.hash, `Calculated token to buy: ${maxTokenToBuy}`, 1);
+
+            // Simulate on ganache
+            let previousBalance = await this._getGanacheBalance();
+            let startTime = new Date().getTime();
+            let newBalance = await this._simulateSandwichAttack(
+                new BN(victimTx.gasPrice),
+                rawVictimTx,
+                path[0],
+                path[1],
+                maxInvestAmount,
+                maxTokenToBuy,
+                maxInvestAmount
+            );
+            let endTime = new Date().getTime();
+
+            this.#logger.addSuccessFortx(victimTx.hash, `Sandwich attack simulated in ${endTime - startTime}ms`, 1);
+            this.#logger.addDebugForTx(victimTx.hash, `Balance before attack: ${previousBalance}`, 2);
+            this.#logger.addDebugForTx(victimTx.hash, `Balance after attack: ${newBalance}`, 2);
+        }
+
         this.#logger.consumeLogsForTx(victimTx.hash);
     }
 
@@ -88,6 +124,9 @@ export class UniBot {
         victimTx: RawTransaction,
         reserveInAddr: string,
         reserveOutAddr: string,
+        amountToInvest: BN,
+        amountTokenToBuy: BN,
+        amountOutMin: BN,
     ): Promise<string> {
 
         let currentNonce = this.#txService.getCurrentNonce();
@@ -107,7 +146,7 @@ export class UniBot {
             TransactionType.onGanache,
             UniswapMethods.swapETHForExactTokens,
             [
-                1,                                                          // amoutTokenOut
+                amountTokenToBuy.toFixed(0, 1),                             // amoutTokenOut
                 [reserveInAddr, reserveOutAddr],                            // Pair
                 process.env.ETH_PUBLIC_KEY,                                 // Wallet
                 Math.floor(new Date().getTime() / 1000) + 180               // Timestamp
@@ -118,8 +157,8 @@ export class UniBot {
             TransactionType.onGanache,
             UniswapMethods.swapExactTokensForETH,
             [
-                1,                                                          // amountIn
-                1,                                                          // amountOutMin
+                amountTokenToBuy.toFixed(0, 1),                             // amountIn
+                amountOutMin.toFixed(0, 1),                                 // amountOutMin
                 [reserveOutAddr, reserveInAddr],                            // Pairs
                 process.env.ETH_PUBLIC_KEY,                                 // Wallet
                 Math.floor(new Date().getTime() / 1000) + 180               // Timestamp
@@ -144,7 +183,7 @@ export class UniBot {
                     from: process.env.ETH_PUBLIC_KEY!,
                     gas: 250000,
                     gasPrice: victimGasPrice.plus(10000000),
-                    value: 100000000,
+                    value: amountToInvest.toFixed(0, 1),
                     nonce: currentNonce + 2,
                     to: UNISWAP_CONTRACT_ADDR,
                 }
@@ -165,6 +204,34 @@ export class UniBot {
         await simulationBox.simulate();
         let balance = await simulationBox.getBalance();
         return balance;
+    }
+
+    private _getMaxAmountIn(
+        reserveIn: BN,
+        reserveOut: BN,
+        amountIn: BN,
+        amountOutMin: BN
+    ): BN {
+        let a = amountOutMin.times(997000);
+        let b = (reserveIn.times(1000 * 1000).plus(reserveIn.times(997000)).plus(amountIn.times(997 * 997))).times(amountOutMin);
+        let c = reserveIn.pow(2).times(1000 * 1000).plus(reserveIn.times(amountIn).times(997000)).times(amountOutMin).minus(reserveIn.times(reserveOut).times(amountIn).times(997000));
+        let delta = b.pow(2).minus(a.times(c).times(4));
+
+        let x1 = b.negated().minus(delta.squareRoot()).dividedBy(a.times(2));
+        let x2 = b.negated().plus(delta.squareRoot()).dividedBy(a.times(2));
+
+        return x2;
+    }
+
+    private _getAmountOut(
+        amountIn: BN,
+        reserveIn: BN,
+        reserveOut: BN
+    ): BN {
+        let amountInWithFee = amountIn.times(997);
+        let numerator = amountInWithFee.times(reserveOut);
+        let denominator = reserveIn.times(1000).plus(amountInWithFee);
+        return numerator.div(denominator);
     }
 
 }

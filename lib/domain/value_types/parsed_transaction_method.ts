@@ -31,12 +31,12 @@
 
 export type ParsedTransactionMethod = {
     "name": string,
-    "params": Array<ParsedTransactionMethodParams>
+    "params": ParsedTransactionMethodParams[]
 }
 
 export type ParsedTransactionMethodParams = {
     "name": string,
-    "value": string | Array<string>
+    "value": string | string[]
     "type": string
 }
 
