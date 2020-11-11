@@ -48,21 +48,22 @@ export class UniBot {
         let priceImpact = reserveOutAfter.minus(reserveOutBefore).div(reserveOutBefore).times(100);
         this.#logger.addDebugForTx(victimTx.hash, `Reserve impact: ${priceImpact} %`, 1);
 
-        // Simulate attack sandwich
-        // Approval ?
-        // Réinsérer notre tx
-        // Réinsérer sa tx
-        // Réinsérer notre 2e tx
-        // Check si on a bien récupérer notre argent
-        let reservesOuts = await this._simulateSandwichAttack(
+        // Simulate on ganache
+        let previousBalance = await this._getGanacheBalance();
+        let newBalance = await this._simulateSandwichAttack(
             new BN(victimTx.gasPrice),
             rawVictimTx,
             path[0],
             path[1]
         );
 
-        this.#logger.addDebugForTx(victimTx.hash, `RESERVE IMPACT AFTER SIMULATION: ${JSON.stringify(reservesOuts)} %`, 1);
+        this.#logger.addDebugForTx(victimTx.hash, `Balance before attack: ${previousBalance}`, 1);
+        this.#logger.addDebugForTx(victimTx.hash, `Balance after attack: ${newBalance}`, 1);
         this.#logger.consumeLogsForTx(victimTx.hash);
+    }
+
+    private async _getGanacheBalance() {
+        return this.#simulationBoxBuilder.copy().build().getBalance();
     }
 
     private async _getReserve(
@@ -87,7 +88,7 @@ export class UniBot {
         victimTx: RawTransaction,
         reserveInAddr: string,
         reserveOutAddr: string,
-    ): Promise<TransactionPairReserves> {
+    ): Promise<string> {
 
         let currentNonce = this.#txService.getCurrentNonce();
 
@@ -118,7 +119,7 @@ export class UniBot {
             UniswapMethods.swapExactTokensForETH,
             [
                 1,                                                          // amountIn
-                0,                                                          // amountOutMin
+                1,                                                          // amountOutMin
                 [reserveOutAddr, reserveInAddr],                            // Pairs
                 process.env.ETH_PUBLIC_KEY,                                 // Wallet
                 Math.floor(new Date().getTime() / 1000) + 180               // Timestamp
@@ -143,7 +144,7 @@ export class UniBot {
                     from: process.env.ETH_PUBLIC_KEY!,
                     gas: 250000,
                     gasPrice: victimGasPrice.plus(10000000),
-                    value: 10000000,
+                    value: 100000000,
                     nonce: currentNonce + 2,
                     to: UNISWAP_CONTRACT_ADDR,
                 }
@@ -162,7 +163,8 @@ export class UniBot {
             .build();
 
         await simulationBox.simulate();
-        return await simulationBox.getSimulationReserves(reserveInAddr, reserveOutAddr);
+        let balance = await simulationBox.getBalance();
+        return balance;
     }
 
 }

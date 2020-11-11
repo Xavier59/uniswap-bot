@@ -34,4 +34,8 @@ export class SimulationBox {
         return this.#simulationService.getSimulationReserves(reserveIn, reserveOut);
     }
 
+    async getBalance(): Promise<string> {
+        return this.#simulationService.getSimulationBalance();
+    }
+
 }

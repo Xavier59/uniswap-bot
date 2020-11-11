@@ -8,6 +8,8 @@ import { BuiltTransactionReadyToSend } from "../../domain/value_types/built_tran
 export class SimulationService implements ISimulationService {
 
     #web3Ganache: Web3;
+
+    // Attributes used to call our cutom getReserves method
     #customContract: Contract;
     #uniswapFactoryAddr: string;
 
@@ -30,6 +32,10 @@ export class SimulationService implements ISimulationService {
             reserveIn,
             reserveOut
         ).call();
+    }
+
+    async getSimulationBalance(): Promise<string> {
+        return await this.#web3Ganache.eth.getBalance(process.env.ETH_PUBLIC_KEY!);
     }
 
     async sendRawTransaction(

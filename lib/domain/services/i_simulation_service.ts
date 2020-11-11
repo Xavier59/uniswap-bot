@@ -4,11 +4,6 @@ import { TransactionPairReserves } from "../value_types/transaction_pair_reserve
 
 export interface ISimulationService {
 
-    getSimulationReserves(
-        reserveIn: string,
-        reserveOut: string
-    ): Promise<TransactionPairReserves>;
-
     sendRawTransaction(
         tx: RawTransaction
     ): Promise<void>;
@@ -17,4 +12,10 @@ export interface ISimulationService {
         tx: BuiltTransactionReadyToSend,
     ): Promise<void>;
 
+    getSimulationReserves(
+        reserveIn: string,
+        reserveOut: string
+    ): Promise<TransactionPairReserves>;
+
+    getSimulationBalance(): Promise<string>;
 }   
