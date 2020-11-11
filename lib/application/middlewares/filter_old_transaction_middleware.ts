@@ -1,4 +1,4 @@
-import { Transaction } from "web3-eth";
+import { Transaction as Web3_Transaction } from "web3-eth";
 import { ITransactionMiddleware } from "./i_transaction_middleware";
 import { ILoggerService } from "../../domain/services/i_logger_service";
 import BN from "bn.js";
@@ -8,12 +8,17 @@ export class FilterOldTxMiddleware extends ITransactionMiddleware {
 
     #txService: ITransactionService;
 
-    constructor(logger: ILoggerService, txService: ITransactionService) {
+    constructor(
+        logger: ILoggerService,
+        txService: ITransactionService
+    ) {
         super(logger);
         this.#txService = txService;
     }
 
-    async dispatch(tx: Transaction): Promise<boolean> {
+    async dispatch(
+        tx: Web3_Transaction
+    ): Promise<boolean> {
         let txGasPrice = new BN(tx.gasPrice);
         // Filter low gasprice tx (tx that are pending for a long time...)
 
@@ -22,7 +27,6 @@ export class FilterOldTxMiddleware extends ITransactionMiddleware {
             this.logger.addErrorForTx(tx.hash, `Filter old pending transaction ${tx.hash}`, 1);
             return false;
         }
-
 
         return await this.next!.dispatch(tx);
 

@@ -1,7 +1,9 @@
 export class SimulationFailure {
     #msg: string;
 
-    constructor(msg: string) {
+    constructor(
+        msg: string
+    ) {
         this.#msg = msg;
     }
 

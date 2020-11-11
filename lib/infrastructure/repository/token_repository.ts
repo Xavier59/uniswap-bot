@@ -6,11 +6,13 @@ export default class TokenRepository {
 
     #collection: Collection;
 
-    constructor(){
+    constructor() {
         this.#collection = Database.getCollection("tokens");
     }
 
-    findOne(item: string): Promise<DbToken | null> {
-        return this.#collection.findOne({address: item.toLowerCase()})
+    findOne(
+        item: string
+    ): Promise<DbToken | null> {
+        return this.#collection.findOne({ address: item.toLowerCase() })
     }
 }

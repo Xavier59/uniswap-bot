@@ -1,11 +1,9 @@
-import { Transaction } from "web3-eth";
 import Web3 from "web3";
-import { SimulationFailure } from "../../domain/failures/simulation_failure";
 import { ISimulationService } from "../../domain/services/i_simulation_service";
-import { SimulationOutput } from "../../domain/value_types/simulation_output";
 import { RawTransaction } from "../../domain/value_types/raw_transaction";
 import { TransactionPairReserves } from "../../domain/value_types/transaction_pair_reserves";
 import { Contract } from "web3-eth-contract"
+import { BuiltTransactionReadyToSend } from "../../domain/value_types/built_transaction";
 
 export class SimulationService implements ISimulationService {
 
@@ -13,24 +11,48 @@ export class SimulationService implements ISimulationService {
     #customContract: Contract;
     #uniswapFactoryAddr: string;
 
-    constructor(web3Ganache: Web3, uniswapFactoryAddr: string, customContract: Contract) {
+    constructor(
+        web3Ganache: Web3,
+        uniswapFactoryAddr: string,
+        customContract: Contract
+    ) {
         this.#web3Ganache = web3Ganache;
         this.#uniswapFactoryAddr = uniswapFactoryAddr;
         this.#customContract = customContract;
     }
 
-    async getSimulationReserves(reserveIn: string, reserveOut: string): Promise<TransactionPairReserves> {
-        return await this.#customContract.methods.getReserves(this.#uniswapFactoryAddr, reserveIn, reserveOut).call();
+    async getSimulationReserves(
+        reserveIn: string,
+        reserveOut: string
+    ): Promise<TransactionPairReserves> {
+        return await this.#customContract.methods.getReserves(
+            this.#uniswapFactoryAddr,
+            reserveIn,
+            reserveOut
+        ).call();
     }
 
-    async simulateTransaction(tx: Transaction | RawTransaction): Promise<void> {
-        if (typeof tx === "string") {
-            await this.#web3Ganache.eth.sendSignedTransaction(tx);
-        } else {
-
-        }
-
+    async sendRawTransaction(
+        tx: RawTransaction
+    ): Promise<void> {
+        await this.#web3Ganache.eth.sendSignedTransaction(tx);
     }
 
+    async sendBuiltTransaction(
+        tx: BuiltTransactionReadyToSend,
+    ): Promise<void> {
+
+        let params = {
+            ...tx.sendParams,
+            data: (tx.transaction as any).encodeABI(),
+        };
+
+        let signedTransaction = await this.#web3Ganache.eth.accounts.signTransaction(
+            params,
+            process.env.ETH_PRIVATE_KEY!
+        );
+
+        await this.#web3Ganache.eth.sendSignedTransaction(signedTransaction.rawTransaction!);
+    }
 
 }

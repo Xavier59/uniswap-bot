@@ -1,22 +1,25 @@
-import { Transaction } from "web3-eth";
+import { Transaction as Web3_Transaction } from "web3-eth";
 import { ITransactionMiddleware } from "./i_transaction_middleware";
 import { ILoggerService } from "../../domain/services/i_logger_service";
-import { TransactionMethod } from "../../domain/value_types/transaction_method";
+import { ParsedTransactionMethod } from "../../domain/value_types/parsed_transaction_method";
+import { TRANSACTION_METHODS } from "../../config";
 
 export class FilterUniswapTxMethodsMiddleware extends ITransactionMiddleware {
 
-    #txMethods: Array<String>;
 
-    constructor(logger: ILoggerService, txMethods: Array<String>) {
+    constructor(
+        logger: ILoggerService,
+    ) {
         super(logger);
-        this.#txMethods = txMethods;
     }
 
-    async dispatch(tx: Transaction): Promise<boolean> {
+    async dispatch(
+        tx: Web3_Transaction
+    ): Promise<boolean> {
 
         // check if we monitor the decoded tx method
-        let txMethod: TransactionMethod = tx["decodedMethod"]
-        if (this.#txMethods.includes(txMethod.name)) {
+        let txMethod: ParsedTransactionMethod = tx["decodedMethod"]
+        if (TRANSACTION_METHODS.includes(txMethod.name)) {
 
             // Only select pair transaction so that eth => btc => sushi won't be monitored for example
             let path = txMethod.params.find(txParam => txParam.name == "path")!.value;

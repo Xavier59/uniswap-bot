@@ -1,13 +1,20 @@
-import { Transaction } from "web3-eth"
-import { SimulationFailure } from "../failures/simulation_failure";
-import { SimulationOutput } from "../value_types/simulation_output";
+import { BuiltTransactionReadyToSend } from "../value_types/built_transaction";
 import { RawTransaction } from "../value_types/raw_transaction";
 import { TransactionPairReserves } from "../value_types/transaction_pair_reserves";
 
 export interface ISimulationService {
 
-    getSimulationReserves(reserveIn: string, reserveOut: string): Promise<TransactionPairReserves>;
+    getSimulationReserves(
+        reserveIn: string,
+        reserveOut: string
+    ): Promise<TransactionPairReserves>;
 
-    simulateTransaction(tx: Transaction | RawTransaction): Promise<void>;
+    sendRawTransaction(
+        tx: RawTransaction
+    ): Promise<void>;
+
+    sendBuiltTransaction(
+        tx: BuiltTransactionReadyToSend,
+    ): Promise<void>;
 
 }   

@@ -5,7 +5,9 @@ import { TransactionPairReserves } from "../value_types/transaction_pair_reserve
 export interface ITransactionService {
 
     // Convert wei to ETH
-    convertToEth(wei: string): string;
+    convertToEth(
+        wei: string
+    ): string;
 
     // Initialize the object before use
     // Mainly initiate gasPrice
@@ -14,15 +16,22 @@ export interface ITransactionService {
     // Return previously fetched gas price
     getGasPrice(): string;
 
-    // TODO
-    getEthPrice(): Promise<BN>;
+    // Return previously fetched nonce
+    getCurrentNonce(): number;
 
     // Return the associated reserve from the tokens pair addresses
-    getReserve(reserveIn: string, reserveOut: string): Promise<TransactionPairReserves>;
+    getReserve(
+        reserveIn: string,
+        reserveOut: string
+    ): Promise<TransactionPairReserves>;
 
     // Return a tx from its hash
-    getTxFromHash(txHash: string): Promise<Transaction>;
+    getTxFromHash(
+        txHash: string
+    ): Promise<Transaction>;
 
     // Return a raw transaction from its hash
-    getRawTxFromHash(txHash: string): Promise<any>;
+    getRawTxFromHash(
+        txHash: string
+    ): Promise<any>;
 }

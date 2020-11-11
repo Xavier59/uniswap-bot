@@ -33,7 +33,9 @@ export class ConsoleLogger implements ILoggerService {
     }
 
 
-    configure(option: Object): void {
+    configure(
+        option: Object
+    ): void {
         this.#logTxError = option["logTxError"] || this.#logTxError;
         this.#logTxInfo = option["logTxInfo"] || this.#logTxInfo;
         this.#logTxDebug = option["logTxDebug"] || this.#logTxDebug;
@@ -42,30 +44,46 @@ export class ConsoleLogger implements ILoggerService {
         this.#logGeneralInfo = option["logGeneralInfo"] || this.#logGeneralInfo;
     }
 
-    addDebugForTx(txHash: string, msg: string, indent: number): void {
+    addDebugForTx(txHash: string,
+        msg: string,
+        indent: number
+    ): void {
         if (this.#logTxDebug) this._addLogForTx(txHash, `[?] ${msg}`, indent);
     }
 
-    addInfoForTx(txHash: string, msg: string, indent: number): void {
+    addInfoForTx(txHash: string,
+        msg: string,
+        indent: number
+    ): void {
         if (this.#logTxInfo) this._addLogForTx(txHash, `[*] ${msg}`, indent);
     }
 
-    addErrorForTx(txHash: string, msg: string, indent: number): void {
+    addErrorForTx(txHash: string,
+        msg: string,
+        indent: number
+    ): void {
         if (this.#logTxError) this._addLogForTx(txHash, `[-] ${msg}`, indent);
     }
 
-    addSuccessFortx(txHash: string, msg: string, indent: number): void {
+    addSuccessFortx(txHash: string,
+        msg: string,
+        indent: number
+    ): void {
         if (this.#logTxSuccess) this._addLogForTx(txHash, `[+] ${msg}`, indent);
     }
 
-    showLogsForTx(txHash: string): void {
+    consumeLogsForTx(
+        txHash: string
+    ): void {
         if (txHash in this.#logBuffer) {
             console.log(this.#logBuffer[txHash]);
             delete this.#logBuffer[txHash];
         }
     }
 
-    logGeneralInfo(msg: string) {
+    logGeneralInfo(
+        msg: string
+    ) {
         if (this.#logGeneralInfo) {
             let currentdate = new Date();
             let dateTime = currentdate.toLocaleString('en-GB', dateOption).replace(',', '');
@@ -74,7 +92,11 @@ export class ConsoleLogger implements ILoggerService {
         }
     }
 
-    _addLogForTx(txHash: string, msg: string, indent: number): void {
+    _addLogForTx(
+        txHash: string,
+        msg: string,
+        indent: number
+    ): void {
 
         let currentdate = new Date();
         let dateTime = currentdate.toLocaleString('en-GB', dateOption).replace(',', '');
@@ -88,7 +110,5 @@ export class ConsoleLogger implements ILoggerService {
         }
 
     }
-
-
 
 }

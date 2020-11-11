@@ -7,7 +7,9 @@ export class TransactionMiddlewareBusBuilder {
         this.#txMiddlewareBus = null;
     }
 
-    pushTxMiddleware(txMiddleware: ITransactionMiddleware): TransactionMiddlewareBusBuilder {
+    pushTxMiddleware(
+        txMiddleware: ITransactionMiddleware
+    ): TransactionMiddlewareBusBuilder {
         if (this.#txMiddlewareBus === null) {
             this.#txMiddlewareBus = txMiddleware;
         } else {

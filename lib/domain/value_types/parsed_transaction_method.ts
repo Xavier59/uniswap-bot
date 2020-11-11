@@ -29,12 +29,12 @@
 // }
 
 
-export type TransactionMethod = {
+export type ParsedTransactionMethod = {
     "name": string,
-    "params": Array<TransactionMethodParams>
+    "params": Array<ParsedTransactionMethodParams>
 }
 
-export type TransactionMethodParams = {
+export type ParsedTransactionMethodParams = {
     "name": string,
     "value": string | Array<string>
     "type": string
