@@ -14,7 +14,7 @@ import { FilterOldTxMiddleware } from "./application/middlewares/filter_old_tran
 import { FilterUniswapTxMethodsMiddleware } from "./application/middlewares/filter_uniswap_transaction_methods_middleware";
 import { FilterAlreadyMinedTxMiddleware } from "./application/middlewares/filter_already_mined_transaction_middleware";
 import { AddDecodedMethodToTxMiddleware } from "./application/middlewares/add_decoded_method_to_transaction_middleware";
-import { SimulationBoxBuilder } from "./infrastructure/factories/simulation_builder";
+import Database from "./infrastructure/services/database";
 
 // import env settings
 dotenv.config();
@@ -48,6 +48,14 @@ async function main() {
     // Basic logger for the bot
     let logger = new ConsoleLogger();
     logger.configure(loggerOption);
+
+    // connect to database
+    try {
+        await Database.connectDatabase(`mongodb://${process.env.MONGO_IP}:${process.env.MONGO_PORT}/`, process.env.DBNAME);
+    } catch (e) {
+        logger.logGeneralInfo(`Couldn't connect to database, got error : ${e}`);
+        return;
+    }
 
     // Create a tx service class that implement utilities methods
     // used by several part of the application
