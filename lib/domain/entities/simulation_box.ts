@@ -1,8 +1,8 @@
+import { TransactionFailure } from "../failures/transaction_failure";
 import { ISimulationService } from "../services/i_simulation_service";
 import { BuiltTransactionReadyToSend } from "../value_types/built_transaction";
 import { RawTransaction } from "../value_types/raw_transaction";
 import { TransactionPairReserves } from "../value_types/transaction_pair_reserves";
-
 
 export class SimulationBox {
 
@@ -17,14 +17,23 @@ export class SimulationBox {
         this.#transactions = txs;
     }
 
-    async simulate(): Promise<void> {
+    async simulate(): Promise<void | TransactionFailure> {
+        let txs: Promise<void | TransactionFailure>[] = [];
+
         this.#transactions.forEach(async tx => {
             if (typeof tx === "string") {
-                await this.#simulationService.sendRawTransaction(tx);
+                txs.push(this.#simulationService.sendRawTransaction(tx));
             } else {
-                await this.#simulationService.sendBuiltTransaction(tx);
+                txs.push(this.#simulationService.sendBuiltTransaction(tx));
             }
         });
+
+        try {
+            await Promise.all(txs)
+        } catch (txFailure) {
+            return txFailure;
+        }
+
     }
 
     async getSimulationReserves(

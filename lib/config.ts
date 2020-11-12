@@ -12,7 +12,7 @@ export const CUSTOM_CONTRACT_ADDR: string = "0x1a9Cf3237266cfc034A710Fa7ACF89b4c
 export const TRANSACTION_METHODS: Array<String> = ["swapExactETHForTokens"];
 
 export const LOGGER_OPTIONS = {
-    "logTxError": true,
+    "logTxError": false,
     "logTxInfo": false,
     "logTxDebug": true,
     "logTxSuccess": true,

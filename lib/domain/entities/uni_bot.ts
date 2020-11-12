@@ -9,6 +9,7 @@ import { ISimulationBoxBuilder } from "../factories/i_simulation_box_builder";
 import { ERC20Methods, ITransactionFactory, TransactionType, UniswapMethods } from "../factories/i_transaction_factory";
 import { MAX_ETH_INVEST, UNISWAP_CONTRACT_ADDR } from "../../config";
 import { BuiltTransaction } from "../value_types/built_transaction";
+import { TransactionFailure } from "../failures/transaction_failure";
 
 export class UniBot {
 
@@ -83,7 +84,7 @@ export class UniBot {
             // Simulate on ganache
             let previousBalance = await this._getGanacheBalance();
             let startTime = new Date().getTime();
-            let newBalance = await this._simulateSandwichAttack(
+            let newBalanceOrFailure = await this._simulateSandwichAttack(
                 new BN(victimTx.gasPrice),
                 rawVictimTx,
                 path[0],
@@ -92,11 +93,17 @@ export class UniBot {
                 maxTokenToBuy,
                 maxInvestAmount
             );
-            let endTime = new Date().getTime();
 
-            this.#logger.addSuccessFortx(victimTx.hash, `Sandwich attack simulated in ${endTime - startTime}ms`, 1);
-            this.#logger.addDebugForTx(victimTx.hash, `Balance before attack: ${previousBalance}`, 2);
-            this.#logger.addDebugForTx(victimTx.hash, `Balance after attack: ${newBalance}`, 2);
+            if (typeof newBalanceOrFailure === "object") {
+                console.log(newBalanceOrFailure.toString());
+                process.exit();
+            } else {
+                let endTime = new Date().getTime();
+
+                this.#logger.addSuccessFortx(victimTx.hash, `Sandwich attack simulated in ${endTime - startTime}ms`, 1);
+                this.#logger.addDebugForTx(victimTx.hash, `Balance before attack: ${previousBalance}`, 2);
+                this.#logger.addDebugForTx(victimTx.hash, `Balance after attack: ${newBalanceOrFailure}`, 2);
+            }
         }
 
         this.#logger.consumeLogsForTx(victimTx.hash);
@@ -131,7 +138,7 @@ export class UniBot {
         amountToInvest: BN,
         amountTokenToBuy: BN,
         amountOutMin: BN,
-    ): Promise<string> {
+    ): Promise<string | TransactionFailure> {
 
         let currentNonce = this.#txService.getCurrentNonce();
 
@@ -181,33 +188,38 @@ export class UniBot {
                     to: reserveOutAddr,
                 },
             })
-            // .addTx({
-            //     transaction: buyTx,
-            //     sendParams: {
-            //         from: process.env.ETH_PUBLIC_KEY!,
-            //         gas: 250000,
-            //         gasPrice: victimGasPrice.plus(10000000),
-            //         value: amountToInvest.toFixed(0, 0),
-            //         nonce: currentNonce + 2,
-            //         to: UNISWAP_CONTRACT_ADDR,
-            //     }
-            // })
+            .addTx({
+                transaction: buyTx,
+                sendParams: {
+                    from: process.env.ETH_PUBLIC_KEY!,
+                    gas: 250000,
+                    gasPrice: victimGasPrice.plus(10000000),
+                    value: amountToInvest.toFixed(0, 0),
+                    nonce: currentNonce + 2,
+                    to: UNISWAP_CONTRACT_ADDR,
+                }
+            })
             .addTx(victimTx)
-            // .addTx({
-            //     transaction: sellTx,
-            //     sendParams: {
-            //         from: process.env.ETH_PUBLIC_KEY!,
-            //         gas: 250000,
-            //         gasPrice: victimGasPrice,
-            //         nonce: currentNonce + 3,
-            //         to: UNISWAP_CONTRACT_ADDR,
-            //     }
-            // })
+            .addTx({
+                transaction: sellTx,
+                sendParams: {
+                    from: process.env.ETH_PUBLIC_KEY!,
+                    gas: 250000,
+                    gasPrice: victimGasPrice,
+                    nonce: currentNonce + 3,
+                    to: UNISWAP_CONTRACT_ADDR,
+                }
+            })
             .build();
 
-        await simulationBox.simulate();
-        let balance = await simulationBox.getBalance();
-        return balance;
+        let voidOrFailure = await simulationBox.simulate();
+        if (typeof voidOrFailure === "object") {
+            return voidOrFailure;
+        } else {
+            let balance = await simulationBox.getBalance();
+            return balance;
+        }
+
     }
 
     private _getMaxAmountIn(
@@ -235,7 +247,6 @@ export class UniBot {
         let x2 = (B.negated().plus(delta.sqrt())).div(a.times(2));
 
         return x2;
-
     }
 
     private _getAmountOut(

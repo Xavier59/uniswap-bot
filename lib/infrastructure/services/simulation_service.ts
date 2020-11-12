@@ -4,6 +4,8 @@ import { RawTransaction } from "../../domain/value_types/raw_transaction";
 import { TransactionPairReserves } from "../../domain/value_types/transaction_pair_reserves";
 import { Contract } from "web3-eth-contract"
 import { BuiltTransactionReadyToSend } from "../../domain/value_types/built_transaction";
+import { TransactionFailure } from "../../domain/failures/transaction_failure";
+import { ILoggerService } from "../../domain/services/i_logger_service";
 
 export class SimulationService implements ISimulationService {
 
@@ -16,7 +18,7 @@ export class SimulationService implements ISimulationService {
     constructor(
         web3Ganache: Web3,
         uniswapFactoryAddr: string,
-        customContract: Contract
+        customContract: Contract,
     ) {
         this.#web3Ganache = web3Ganache;
         this.#uniswapFactoryAddr = uniswapFactoryAddr;
@@ -41,7 +43,11 @@ export class SimulationService implements ISimulationService {
     async sendRawTransaction(
         tx: RawTransaction
     ): Promise<void> {
-        await this.#web3Ganache.eth.sendSignedTransaction(tx);
+        try {
+            await this.#web3Ganache.eth.sendSignedTransaction(tx);
+        } catch (error) {
+            throw new TransactionFailure("RAW_TX", error);
+        }
     }
 
     async sendBuiltTransaction(
@@ -53,12 +59,16 @@ export class SimulationService implements ISimulationService {
             data: (tx.transaction as any).encodeABI(),
         };
 
-        let signedTransaction = await this.#web3Ganache.eth.accounts.signTransaction(
-            params,
-            process.env.ETH_PRIVATE_KEY!
-        );
+        try {
+            let signedTransaction = await this.#web3Ganache.eth.accounts.signTransaction(
+                params,
+                process.env.ETH_PRIVATE_KEY!
+            );
 
-        await this.#web3Ganache.eth.sendSignedTransaction(signedTransaction.rawTransaction!);
+            await this.#web3Ganache.eth.sendSignedTransaction(signedTransaction.rawTransaction!);
+        } catch (error) {
+            throw new TransactionFailure((tx.transaction as any)._method.name, error);
+        }
     }
 
 }
