@@ -54,11 +54,13 @@ export class UniBot {
         let reserveIn = new BN(reserveBeforeVictimTx.reserveA);
         let reserveOut = new BN(reserveBeforeVictimTx.reserveB);
 
-        let maxInvestAmount = this._getMaxAmountIn(
-            reserveIn,
-            reserveOut,
-            amountIn,
-            amountOutMin
+        let maxInvestAmount = new BN(
+            this._getMaxAmountIn(
+                reserveIn,
+                reserveOut,
+                amountIn,
+                amountOutMin
+            ).toFixed(0, 1)
         );
 
         this.#logger.addDebugForTx(victimTx.hash, `Calculated eth invest: ${maxInvestAmount}`, 1);
@@ -68,10 +70,12 @@ export class UniBot {
         } else {
 
             // Compute how many token we can get for the eth amount invested
-            let maxTokenToBuy = this._getAmountOut(
-                maxInvestAmount,
-                reserveIn,
-                reserveOut
+            let maxTokenToBuy = new BN(
+                this._getAmountOut(
+                    maxInvestAmount,
+                    reserveIn,
+                    reserveOut
+                ).toFixed(0, 1)
             );
 
             this.#logger.addDebugForTx(victimTx.hash, `Calculated token to buy: ${maxTokenToBuy}`, 1);
@@ -146,7 +150,7 @@ export class UniBot {
             TransactionType.onGanache,
             UniswapMethods.swapETHForExactTokens,
             [
-                amountTokenToBuy.toFixed(0, 1),                             // amoutTokenOut
+                amountTokenToBuy,                                           // amoutTokenOut
                 [reserveInAddr, reserveOutAddr],                            // Pair
                 process.env.ETH_PUBLIC_KEY,                                 // Wallet
                 Math.floor(new Date().getTime() / 1000) + 180               // Timestamp
@@ -157,8 +161,8 @@ export class UniBot {
             TransactionType.onGanache,
             UniswapMethods.swapExactTokensForETH,
             [
-                amountTokenToBuy.toFixed(0, 1),                             // amountIn
-                amountOutMin.toFixed(0, 1),                                 // amountOutMin
+                amountTokenToBuy,                                           // amountIn
+                amountOutMin,                                               // amountOutMin
                 [reserveOutAddr, reserveInAddr],                            // Pairs
                 process.env.ETH_PUBLIC_KEY,                                 // Wallet
                 Math.floor(new Date().getTime() / 1000) + 180               // Timestamp
@@ -177,28 +181,28 @@ export class UniBot {
                     to: reserveOutAddr,
                 },
             })
-            .addTx({
-                transaction: buyTx,
-                sendParams: {
-                    from: process.env.ETH_PUBLIC_KEY!,
-                    gas: 250000,
-                    gasPrice: victimGasPrice.plus(10000000),
-                    value: amountToInvest.toFixed(0, 1),
-                    nonce: currentNonce + 2,
-                    to: UNISWAP_CONTRACT_ADDR,
-                }
-            })
+            // .addTx({
+            //     transaction: buyTx,
+            //     sendParams: {
+            //         from: process.env.ETH_PUBLIC_KEY!,
+            //         gas: 250000,
+            //         gasPrice: victimGasPrice.plus(10000000),
+            //         value: amountToInvest.toFixed(0, 0),
+            //         nonce: currentNonce + 2,
+            //         to: UNISWAP_CONTRACT_ADDR,
+            //     }
+            // })
             .addTx(victimTx)
-            .addTx({
-                transaction: sellTx,
-                sendParams: {
-                    from: process.env.ETH_PUBLIC_KEY!,
-                    gas: 250000,
-                    gasPrice: victimGasPrice,
-                    nonce: currentNonce + 3,
-                    to: UNISWAP_CONTRACT_ADDR,
-                }
-            })
+            // .addTx({
+            //     transaction: sellTx,
+            //     sendParams: {
+            //         from: process.env.ETH_PUBLIC_KEY!,
+            //         gas: 250000,
+            //         gasPrice: victimGasPrice,
+            //         nonce: currentNonce + 3,
+            //         to: UNISWAP_CONTRACT_ADDR,
+            //     }
+            // })
             .build();
 
         await simulationBox.simulate();
@@ -212,15 +216,26 @@ export class UniBot {
         amountIn: BN,
         amountOutMin: BN
     ): BN {
-        let a = amountOutMin.times(997000);
-        let b = (reserveIn.times(1000 * 1000).plus(reserveIn.times(997000)).plus(amountIn.times(997 * 997))).times(amountOutMin);
-        let c = reserveIn.pow(2).times(1000 * 1000).plus(reserveIn.times(amountIn).times(997000)).times(amountOutMin).minus(reserveIn.times(reserveOut).times(amountIn).times(997000));
-        let delta = b.pow(2).minus(a.times(c).times(4));
+        let a = amountIn;
+        let b = reserveIn;
+        let c = reserveOut;
+        let d = amountOutMin;
 
-        let x1 = b.negated().minus(delta.squareRoot()).dividedBy(a.times(2));
-        let x2 = b.negated().plus(delta.squareRoot()).dividedBy(a.times(2));
+        let A = new BN("997000");
+        let B = new BN("1997000").times(b.times(d)).plus(new BN("994009").times(a.times(d)));
+        let C = new BN("1000000").times(b.times(b).times(d)).plus(new BN("997000").times(a.times(b.times(d)))).minus(new BN("997000").times(a.times(b.times(c))));
+
+        let delta = (B.times(B)).minus(A.times(C).times(4));
+
+        if (delta.lt(0)) {
+            throw new Error("DELTA < 0 not possible !");
+        }
+
+        let x1 = (B.negated().minus(delta.sqrt())).div(a.times(2));
+        let x2 = (B.negated().plus(delta.sqrt())).div(a.times(2));
 
         return x2;
+
     }
 
     private _getAmountOut(
