@@ -1,3 +1,5 @@
+import BN from "bignumber.js";
+
 export const PRIVATE_NODE = `ws://${process.env.NODE_IP}:${process.env.NODE_PORT}`;
 
 export const GANACHE_OPTIONS = {
@@ -12,11 +14,11 @@ export const CUSTOM_CONTRACT_ADDR: string = "0x1a9Cf3237266cfc034A710Fa7ACF89b4c
 export const TRANSACTION_METHODS: Array<String> = ["swapExactETHForTokens"];
 
 export const LOGGER_OPTIONS = {
-    "logTxError": false,
-    "logTxInfo": false,
+    "logTxError": true,
+    "logTxInfo": true,
     "logTxDebug": true,
     "logTxSuccess": true,
     "logGeneralInfo": true,
 };
 
-export const MAX_ETH_INVEST = "500000000000000000" // 0,5 ETH
+export const MAX_ETH_INVEST = new BN("500000000000000000"); // 0,5 ETH

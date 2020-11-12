@@ -33,7 +33,7 @@ export class UniBot {
     async processTx(
         victimTx: Web3_Transaction
     ) {
-        this.#logger.addDebugForTx(victimTx.hash, `Tx ${victimTx.hash} received by the bot`, 1);
+        this.#logger.addSuccessFortx(victimTx.hash, `Tx ${victimTx.hash} received by the bot`, 2);
 
         // Call get reserve custom amoutIn amoutOut
         let txMethod: ParsedTransactionMethod = victimTx["decodedMethod"];
@@ -45,67 +45,84 @@ export class UniBot {
         let reserveAfterVictimTx = await this._getReserveAfterVictimTx(rawVictimTx, path[0], path[1]);
         let reserveOutBefore = new BN(reserveBeforeVictimTx.reserveB);
         let reserveOutAfter = new BN(reserveAfterVictimTx.reserveB);
-        let priceImpact = reserveOutAfter.minus(reserveOutBefore).div(reserveOutBefore).times(100);
-        this.#logger.addDebugForTx(victimTx.hash, `Reserve impact: ${priceImpact} %`, 1);
+        let reserveImpact = reserveOutAfter.minus(reserveOutBefore).div(reserveOutBefore).times(100).toNumber();
+        this.#logger.addInfoForTx(victimTx.hash, `Reserve impact: ${reserveImpact}%`, 2);
 
-        // Compute eth to invest to make a worthy trade
-        let decodedTxMethod: ParsedTransactionMethod = victimTx["decodedMethod"];
-        let amountOutMin = new BN(decodedTxMethod.params.find(txParam => txParam.name === "amountOutMin")!.value as string);
-        let amountIn = new BN(victimTx.value);
-        let reserveIn = new BN(reserveBeforeVictimTx.reserveA);
-        let reserveOut = new BN(reserveBeforeVictimTx.reserveB);
+        if (reserveImpact > -0.6) {
+            this.#logger.addErrorForTx(victimTx.hash, `Impact to low not worth to trade.`, 3);
+        } else {
+            this.#logger.addSuccessFortx(victimTx.hash, `Impact interesting, entering trade.`, 3);
+            // Compute eth to invest to make a worthy trade
+            let decodedTxMethod: ParsedTransactionMethod = victimTx["decodedMethod"];
+            let amountOutMin = new BN(decodedTxMethod.params.find(txParam => txParam.name === "amountOutMin")!.value as string);
+            let amountIn = new BN(victimTx.value);
 
-        let maxInvestAmount = new BN(
-            this._getMaxAmountIn(
+            let reserveIn = new BN(reserveBeforeVictimTx.reserveA);
+            let reserveOut = new BN(reserveBeforeVictimTx.reserveB);
+
+            this.#logger.addInfoForTx(victimTx.hash, `Reserve in: ${reserveIn}`, 3);
+            this.#logger.addInfoForTx(victimTx.hash, `Reserve out: ${reserveOut}`, 3);
+
+            let maxInvestAmount = this._getMaxAmountIn(
                 reserveIn,
                 reserveOut,
                 amountIn,
                 amountOutMin
-            ).toFixed(0, 1)
-        );
+            );
 
-        this.#logger.addDebugForTx(victimTx.hash, `Calculated eth invest: ${maxInvestAmount}`, 1);
+            this.#logger.addInfoForTx(
+                victimTx.hash,
+                `Calculated max ETH amount to invest: ${maxInvestAmount}`,
+                3
+            );
 
-        if (maxInvestAmount.gt(new BN(MAX_ETH_INVEST))) {
-            this.#logger.addErrorForTx(victimTx.hash, `Invest amount to high`, 1)
-        } else {
+            if (maxInvestAmount.lte(0)) {
+                this.#logger.addErrorForTx(victimTx.hash, `Invest amount is negative !`, 3);
+            } else {
+                if (maxInvestAmount.gt(MAX_ETH_INVEST)) {
+                    this.#logger.addInfoForTx(victimTx.hash, `Invest amount to high, clipping to ${MAX_ETH_INVEST}`, 3);
+                    maxInvestAmount = MAX_ETH_INVEST;
+                }
 
-            // Compute how many token we can get for the eth amount invested
-            let maxTokenToBuy = new BN(
-                this._getAmountOut(
+                // Compute how many token we can get for the eth amount invested
+                let maxTokenToBuy = this._getAmountOut(
                     maxInvestAmount,
                     reserveIn,
                     reserveOut
-                ).toFixed(0, 1)
-            );
+                );
 
-            this.#logger.addDebugForTx(victimTx.hash, `Calculated token to buy: ${maxTokenToBuy}`, 1);
+                this.#logger.addInfoForTx(
+                    victimTx.hash,
+                    `Calculated token to buy: ${maxTokenToBuy}`,
+                    3
+                );
 
-            // Simulate on ganache
-            let previousBalance = await this._getGanacheBalance();
-            let startTime = new Date().getTime();
-            let newBalanceOrFailure = await this._simulateSandwichAttack(
-                new BN(victimTx.gasPrice),
-                rawVictimTx,
-                path[0],
-                path[1],
-                maxInvestAmount,
-                maxTokenToBuy,
-                maxInvestAmount
-            );
+                // Simulate on ganache
+                let previousBalance = await this._getGanacheBalance();
+                let startTime = new Date().getTime();
 
-            if (typeof newBalanceOrFailure === "object") {
-                console.log(newBalanceOrFailure.toString());
-                process.exit();
-            } else {
+                let newBalanceOrFailure = await this._simulateSandwichAttack(
+                    new BN(victimTx.gasPrice),
+                    rawVictimTx,
+                    path[0],
+                    path[1],
+                    maxInvestAmount.plus(maxInvestAmount.times(0.01)).toFixed(0, 0),        // round up eth invested
+                    maxTokenToBuy.toFixed(0, 1),                                            // round down tokens to buy
+                    maxInvestAmount.toFixed(0, 1)                                           // round down eth to get back
+                );
                 let endTime = new Date().getTime();
+                this.#logger.addInfoForTx(victimTx.hash, `Sandwich attack simulated in ${endTime - startTime}ms`, 4);
 
-                this.#logger.addSuccessFortx(victimTx.hash, `Sandwich attack simulated in ${endTime - startTime}ms`, 1);
-                this.#logger.addDebugForTx(victimTx.hash, `Balance before attack: ${previousBalance}`, 2);
-                this.#logger.addDebugForTx(victimTx.hash, `Balance after attack: ${newBalanceOrFailure}`, 2);
+                if (typeof newBalanceOrFailure === "object") {
+                    this.#logger.addErrorForTx(victimTx.hash, `Transaction failed: ${newBalanceOrFailure.toString()}`, 4);
+                    this.#logger.consumeLogsForTx(victimTx.hash);
+                    process.exit();
+                } else {
+                    this.#logger.addInfoForTx(victimTx.hash, `Balance before attack: ${previousBalance}`, 4);
+                    this.#logger.addInfoForTx(victimTx.hash, `Balance after attack: ${newBalanceOrFailure}`, 4);
+                }
             }
         }
-
         this.#logger.consumeLogsForTx(victimTx.hash);
     }
 
@@ -135,9 +152,9 @@ export class UniBot {
         victimTx: RawTransaction,
         reserveInAddr: string,
         reserveOutAddr: string,
-        amountToInvest: BN,
-        amountTokenToBuy: BN,
-        amountOutMin: BN,
+        amountToInvest: string,
+        amountTokenToBuy: string,
+        amountOutMin: string,
     ): Promise<string | TransactionFailure> {
 
         let currentNonce = this.#txService.getCurrentNonce();
@@ -194,7 +211,7 @@ export class UniBot {
                     from: process.env.ETH_PUBLIC_KEY!,
                     gas: 250000,
                     gasPrice: victimGasPrice.plus(10000000),
-                    value: amountToInvest.toFixed(0, 0),
+                    value: amountToInvest,
                     nonce: currentNonce + 2,
                     to: UNISWAP_CONTRACT_ADDR,
                 }
@@ -233,7 +250,7 @@ export class UniBot {
         let c = reserveOut;
         let d = amountOutMin;
 
-        let A = new BN("997000");
+        let A = new BN("997000").times(amountOutMin);
         let B = new BN("1997000").times(b.times(d)).plus(new BN("994009").times(a.times(d)));
         let C = new BN("1000000").times(b.times(b).times(d)).plus(new BN("997000").times(a.times(b.times(d)))).minus(new BN("997000").times(a.times(b.times(c))));
 
@@ -243,8 +260,8 @@ export class UniBot {
             throw new Error("DELTA < 0 not possible !");
         }
 
-        let x1 = (B.negated().minus(delta.sqrt())).div(a.times(2));
-        let x2 = (B.negated().plus(delta.sqrt())).div(a.times(2));
+        let x1 = (B.negated().minus(delta.squareRoot())).div(a.times(2));
+        let x2 = (B.negated().plus(delta.squareRoot())).div(a.times(2));
 
         return x2;
     }

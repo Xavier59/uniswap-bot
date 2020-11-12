@@ -64,7 +64,6 @@ export class SimulationService implements ISimulationService {
                 params,
                 process.env.ETH_PRIVATE_KEY!
             );
-
             await this.#web3Ganache.eth.sendSignedTransaction(signedTransaction.rawTransaction!);
         } catch (error) {
             throw new TransactionFailure((tx.transaction as any)._method.name, error);
