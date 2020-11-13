@@ -48,7 +48,7 @@ export class UniBot {
         let reserveImpact = reserveOutAfter.minus(reserveOutBefore).div(reserveOutBefore).times(100).toNumber();
         this.#logger.addInfoForTx(victimTx.hash, `Reserve impact: ${reserveImpact}%`, 2);
 
-        if (reserveImpact > -0.6) {
+        if (reserveImpact > -1) {
             this.#logger.addErrorForTx(victimTx.hash, `Impact to low not worth to trade.`, 3);
         } else {
             this.#logger.addSuccessFortx(victimTx.hash, `Impact interesting, entering trade.`, 3);
@@ -106,7 +106,7 @@ export class UniBot {
                     rawVictimTx,
                     path[0],
                     path[1],
-                    maxInvestAmount.plus(maxInvestAmount.times(0.05)).toFixed(0, 0),        // round up eth invested
+                    maxInvestAmount.plus(maxInvestAmount.times(0.02)).toFixed(0, 0),        // round up eth invested
                     maxTokenToBuy.toFixed(0, 1),                                            // round down tokens to buy
                     maxInvestAmount.toFixed(0, 1)                                           // round down eth to get back
                 );
