@@ -20,6 +20,6 @@ export class TransactionFailure {
     }
 
     toString(): string {
-        return `${this.#txMethod}: ${this.#error.results[this.#error.hashes[0]].reason}`;
+        return `${this.#txMethod}: ${this.#error.results ? this.#error.results[this.#error.hashes[0]].reason : this.#error} `;
     }
 }

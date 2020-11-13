@@ -16,9 +16,9 @@ export const TRANSACTION_METHODS: Array<String> = ["swapExactETHForTokens"];
 export const LOGGER_OPTIONS = {
     "logTxError": true,
     "logTxInfo": true,
-    "logTxDebug": true,
+    "logTxDebug": false,
     "logTxSuccess": true,
-    "logGeneralInfo": true,
+    "logGeneralInfo": false,
 };
 
 export const MAX_ETH_INVEST = new BN("500000000000000000"); // 0,5 ETH

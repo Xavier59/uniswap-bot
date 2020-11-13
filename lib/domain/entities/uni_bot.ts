@@ -10,6 +10,7 @@ import { ERC20Methods, ITransactionFactory, TransactionType, UniswapMethods } fr
 import { MAX_ETH_INVEST, UNISWAP_CONTRACT_ADDR } from "../../config";
 import { BuiltTransaction } from "../value_types/built_transaction";
 import { TransactionFailure } from "../failures/transaction_failure";
+import Web3 from "web3";
 
 export class UniBot {
 
@@ -49,7 +50,7 @@ export class UniBot {
         this.#logger.addInfoForTx(victimTx.hash, `Reserve impact: ${reserveImpact}%`, 2);
 
         if (reserveImpact > -0.6) {
-            this.#logger.addErrorForTx(victimTx.hash, `Impact to low not worth to trade.`, 3);
+            this.#logger.addErrorForTx(victimTx.hash, `Impact too low not worth to trade.`, 3);
         } else {
             this.#logger.addSuccessFortx(victimTx.hash, `Impact interesting, entering trade.`, 3);
             // Compute eth to invest to make a worthy trade
@@ -116,7 +117,7 @@ export class UniBot {
                 if (typeof newBalanceOrFailure === "object") {
                     this.#logger.addErrorForTx(victimTx.hash, `Transaction failed: ${newBalanceOrFailure.toString()}`, 4);
                     this.#logger.consumeLogsForTx(victimTx.hash);
-                    process.exit();
+                    //process.exit();
                 } else {
                     this.#logger.addInfoForTx(victimTx.hash, `Balance before attack: ${previousBalance}`, 4);
                     this.#logger.addInfoForTx(victimTx.hash, `Balance after attack: ${newBalanceOrFailure}`, 4);
@@ -138,27 +139,27 @@ export class UniBot {
     }
 
     private async _getReserve(
-        reserveInAddr: string,
-        reserveOutAddr: string
+        tokenA: string,
+        tokenB: string
     ): Promise<TransactionPairReserves> {
-        return await this.#txService.getReserve(reserveInAddr, reserveOutAddr);
+        return await this.#txService.getReserve(tokenA, tokenB);
     }
 
     private async _getReserveAfterVictimTx(
         victimTx: RawTransaction,
-        reserveIn: string,
-        reserveOut: string
+        tokenA: string,
+        tokenB: string
     ): Promise<TransactionPairReserves> {
         let simulationBox = this.#simulationBoxBuilder.copy().addTx(victimTx).build();
         await simulationBox.simulate();
-        return await simulationBox.getSimulationReserves(reserveIn, reserveOut);
+        return await simulationBox.getSimulationReserves(tokenA, tokenB);
     }
 
     private async _simulateSandwichAttack(
         victimGasPrice: BN,
         victimTx: RawTransaction,
-        reserveInAddr: string,
-        reserveOutAddr: string,
+        tokenA: string,
+        tokenB: string,
         amountToInvest: string,
         amountTokenToBuy: string,
         amountOutMin: string,
@@ -169,7 +170,7 @@ export class UniBot {
         // Approval transaction
         let approveTx: BuiltTransaction = this.#transactionfactory.createErc20Transaction(
             TransactionType.onGanache,
-            reserveOutAddr,
+            tokenB,
             ERC20Methods.approve,
             [
                 UNISWAP_CONTRACT_ADDR,                                                                  // Uniswap contract
@@ -182,7 +183,7 @@ export class UniBot {
             UniswapMethods.swapETHForExactTokens,
             [
                 amountTokenToBuy,                                           // amoutTokenOut
-                [reserveInAddr, reserveOutAddr],                            // Pair
+                [tokenA, tokenB],                                           // Pair
                 process.env.ETH_PUBLIC_KEY,                                 // Wallet
                 Math.floor(new Date().getTime() / 1000) + 180               // Timestamp
             ]
@@ -194,11 +195,13 @@ export class UniBot {
             [
                 amountTokenToBuy,                                           // amountIn
                 amountOutMin,                                               // amountOutMin
-                [reserveOutAddr, reserveInAddr],                            // Pairs
+                [tokenB, tokenA],                                           // Pairs
                 process.env.ETH_PUBLIC_KEY,                                 // Wallet
                 Math.floor(new Date().getTime() / 1000) + 180               // Timestamp
             ]
         );
+
+
 
         let simulationBox = this.#simulationBoxBuilder
             .copy()
@@ -209,7 +212,7 @@ export class UniBot {
                     gas: 60000,
                     gasPrice: victimGasPrice.plus(10000001),
                     nonce: currentNonce + 1,
-                    to: reserveOutAddr,
+                    to: tokenB,
                 },
             })
             .addTx({

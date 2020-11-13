@@ -18,7 +18,7 @@ export class FilterNonUniswapTxMiddleware extends ITransactionMiddleware {
 
         // Filter only uniswap transactions
         if (tx.to === null || tx.to.toLowerCase() !== UNISWAP_CONTRACT_ADDR) {
-            this.logger.addErrorForTx(tx.hash, `Transaction ${tx.hash} is not for uniswap`, 1);
+            this.logger.addDebugForTx(tx.hash, `Transaction ${tx.hash} is not for uniswap`, 1);
             return false;
         }
 

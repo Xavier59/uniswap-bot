@@ -37,10 +37,10 @@ export class SimulationBox {
     }
 
     async getSimulationReserves(
-        reserveIn: string,
-        reserveOut: string
+        tokenA: string,
+        tokenB: string
     ): Promise<TransactionPairReserves> {
-        return this.#simulationService.getSimulationReserves(reserveIn, reserveOut);
+        return this.#simulationService.getSimulationReserves(tokenA, tokenB);
     }
 
     async getBalance(): Promise<string> {

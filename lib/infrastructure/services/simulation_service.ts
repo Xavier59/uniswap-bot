@@ -26,13 +26,13 @@ export class SimulationService implements ISimulationService {
     }
 
     async getSimulationReserves(
-        reserveIn: string,
-        reserveOut: string
+        tokenA: string,
+        tokenB: string
     ): Promise<TransactionPairReserves> {
         return await this.#customContract.methods.getReserves(
             this.#uniswapFactoryAddr,
-            reserveIn,
-            reserveOut
+            tokenA,
+            tokenB
         ).call();
     }
 
@@ -53,7 +53,6 @@ export class SimulationService implements ISimulationService {
     async sendBuiltTransaction(
         tx: BuiltTransactionReadyToSend,
     ): Promise<void> {
-
         let params = {
             ...tx.sendParams,
             data: (tx.transaction as any).encodeABI(),

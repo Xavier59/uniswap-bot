@@ -24,7 +24,7 @@ export class FilterOldTxMiddleware extends ITransactionMiddleware {
 
         let minGasPrice = await this.#txService.getGasPrice();
         if (txGasPrice.lt(new BN(minGasPrice))) {
-            this.logger.addErrorForTx(tx.hash, `Filter old pending transaction ${tx.hash}`, 1);
+            this.logger.addDebugForTx(tx.hash, `Filter old pending transaction ${tx.hash}`, 1);
             return false;
         }
 

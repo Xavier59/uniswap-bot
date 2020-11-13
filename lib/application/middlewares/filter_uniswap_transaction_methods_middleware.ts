@@ -30,7 +30,7 @@ export class FilterUniswapTxMethodsMiddleware extends ITransactionMiddleware {
             this.logger.addErrorForTx(tx.hash, `Transaction ${tx.hash} is not a pair, abandon`, 1)
 
         } else {
-            this.logger.addErrorForTx(tx.hash, `Targeted method not found for ${tx.hash}`, 1);
+            this.logger.addDebugForTx(tx.hash, `Targeted method not found for ${tx.hash}`, 1);
         }
 
         return false;

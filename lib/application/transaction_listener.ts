@@ -31,7 +31,7 @@ export class TransactionListener {
                 if (tx == null) {
                     this.#logger.addErrorForTx(txHash, `Error while fetching the tx for ${txHash}`, 0);
                 } else {
-                    this.#logger.addInfoForTx(txHash, `Transaction ${txHash} received`, 0);
+                    this.#logger.addDebugForTx(txHash, `Transaction ${txHash} received`, 0);
                     await this.#txMiddlewareBus.dispatch(tx);
                     this.#logger.consumeLogsForTx(tx.hash);
                 }
