@@ -18,7 +18,6 @@ export class SimulationBox {
     }
 
     async simulate(): Promise<void | TransactionFailure> {
-        let txs: void | TransactionFailure[] = [];
 
         for (let i = 0; i < this.#transactions.length; i++) {
             try {

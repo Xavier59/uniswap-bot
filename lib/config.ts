@@ -21,4 +21,4 @@ export const LOGGER_OPTIONS = {
     "logGeneralInfo": false,
 };
 
-export const MAX_ETH_INVEST = new BN("500000000000000000"); // 0,5 ETH
+export const MAX_ETH_INVEST = new BN("5000000000000000000"); // 0.5 ETH
