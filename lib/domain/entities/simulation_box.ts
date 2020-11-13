@@ -18,22 +18,19 @@ export class SimulationBox {
     }
 
     async simulate(): Promise<void | TransactionFailure> {
-        let txs: Promise<void | TransactionFailure>[] = [];
+        let txs: void | TransactionFailure[] = [];
 
-        this.#transactions.forEach(async tx => {
-            if (typeof tx === "string") {
-                txs.push(this.#simulationService.sendRawTransaction(tx));
-            } else {
-                txs.push(this.#simulationService.sendBuiltTransaction(tx));
+        for (let i = 0; i < this.#transactions.length; i++) {
+            try {
+                if (typeof this.#transactions[i] === "string") {
+                    await this.#simulationService.sendRawTransaction(this.#transactions[i] as string);
+                } else {
+                    await this.#simulationService.sendBuiltTransaction(this.#transactions[i] as BuiltTransactionReadyToSend);
+                }
+            } catch (txFailure) {
+                return txFailure;
             }
-        });
-
-        try {
-            await Promise.all(txs)
-        } catch (txFailure) {
-            return txFailure;
         }
-
     }
 
     async getSimulationReserves(

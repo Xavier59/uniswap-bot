@@ -107,7 +107,7 @@ export class UniBot {
                     rawVictimTx,
                     path[0],
                     path[1],
-                    maxInvestAmount.plus(maxInvestAmount.times(0.02)).toFixed(0, 0),        // round up eth invested
+                    maxInvestAmount.toFixed(0, 1),                                          // round up eth invested
                     maxTokenToBuy.toFixed(0, 1),                                            // round down tokens to buy
                     maxInvestAmount.toFixed(0, 1)                                           // round down eth to get back
                 );
@@ -122,7 +122,7 @@ export class UniBot {
                     this.#logger.addInfoForTx(victimTx.hash, `Balance before attack: ${previousBalance}`, 4);
                     this.#logger.addInfoForTx(victimTx.hash, `Balance after attack: ${newBalanceOrFailure}`, 4);
 
-                    let won = new BN(newBalanceOrFailure).minus(new BN(previousBalance)).gt(new BN(previousBalance));
+                    let won = new BN(newBalanceOrFailure).minus(new BN(previousBalance)).gt(0);
                     if (won) {
                         this.#logger.addErrorForTx(victimTx.hash, `Trade worth`, 4);
                     } else {
