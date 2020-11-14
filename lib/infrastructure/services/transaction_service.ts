@@ -33,6 +33,10 @@ export class TransactionService implements ITransactionService {
 
     }
 
+    async updateNonce(): Promise<void> {
+        this.#currentNonce = await this._fetchNonce();
+    }
+
     async init(): Promise<void> {
         this.#web3.eth.extend({
             methods: [{

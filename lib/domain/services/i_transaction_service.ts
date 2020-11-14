@@ -23,6 +23,9 @@ export interface ITransactionService {
     getCurrentNonce(): number;
 
     // Return previously fetched nonce
+    updateNonce(): Promise<void>;
+
+    // Return previously fetched nonce
     fetchBlockNumber(): Promise<number>;
 
     // Return the associated reserve from the tokens pair addresses

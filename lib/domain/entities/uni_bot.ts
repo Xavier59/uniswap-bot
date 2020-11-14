@@ -149,13 +149,12 @@ export class UniBot {
                         blockNumber,
                         transactions
                     );
-                    this.#attackInProcess = false;
 
                     if (voidOrTransactionFailure instanceof TransactionFailure) {
                         this.#loggerService.addErrorForTx(victimTx.hash, `Transaction failed on mainnet: ${voidOrTransactionFailure.toString()}`, 4);
 
                         // if the approval transaction did not fail we need to update the db as well
-                        if (voidOrTransactionFailure.getMethod() !== "RAW_TX") {
+                        if (voidOrTransactionFailure.getMethod() !== "approve") {
                             await this.#tokenService.approveToken(tokenB);
                         }
 
@@ -165,6 +164,12 @@ export class UniBot {
                             await this.#tokenService.approveToken(tokenB);
                         }
                     }
+
+                    // In all cases, update nonce
+                    await this.#txService.updateNonce();
+
+                    // Free the "lock" lol
+                    this.#attackInProcess = false;
                 }
 
             }
