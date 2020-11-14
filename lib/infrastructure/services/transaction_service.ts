@@ -1,4 +1,3 @@
-import BN from "bn.js";
 import Web3 from "web3";
 import { Transaction } from "web3-eth"
 import { Contract } from "web3-eth-contract"

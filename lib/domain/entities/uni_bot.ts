@@ -11,23 +11,29 @@ import { MAX_ETH_INVEST, UNISWAP_CONTRACT_ADDR } from "../../config";
 import { BuiltTransaction, BuiltTransactionReadyToSend } from "../value_types/built_transaction";
 import { TransactionFailure } from "../failures/transaction_failure";
 import { SimulationBox } from "./simulation_box";
+import { ITokenService } from "../services/i_token_service";
 
 export class UniBot {
 
+    #loggerService: ILoggerService;
     #txService: ITransactionService;
+    #tokenService: ITokenService;
+
     #transactionfactory: ITransactionFactory;
     #simulationBoxBuilder: ISimulationBoxBuilder;
-    #logger: ILoggerService;
+
     #attackInProcess: boolean;
 
     constructor(
+        loggerService: ILoggerService,
         txService: ITransactionService,
+        tokenService: ITokenService,
         transactionfactory: ITransactionFactory,
         simulationBoxBuilder: ISimulationBoxBuilder,
-        logger: ILoggerService
     ) {
+        this.#loggerService = loggerService;
         this.#txService = txService;
-        this.#logger = logger;
+        this.#tokenService = tokenService;
         this.#simulationBoxBuilder = simulationBoxBuilder;
         this.#transactionfactory = transactionfactory;
         this.#attackInProcess = false;
@@ -36,35 +42,41 @@ export class UniBot {
     async processTx(
         victimTx: Web3_Transaction
     ) {
+
+        // Get the block number before all computation
+        // used to make sur the block has not been mined
+        // when we trigger the attack
         const blockNumber = await this.#txService.fetchBlockNumber();
 
-        this.#logger.addSuccessFortx(victimTx.hash, `Tx ${victimTx.hash} received by the bot`, 2);
+        this.#loggerService.addSuccessFortx(victimTx.hash, `Tx ${victimTx.hash} received by the bot`, 2);
 
         // Call get reserve custom amoutIn amoutOut
         const txMethod: ParsedTransactionMethod = victimTx["decodedMethod"];
         const path = txMethod.params.find(txParam => txParam.name == "path")!.value as string[];
 
         // Compute reserve impact
-        const reserveBeforeVictimTx = await this.#txService.getReserve(path[0], path[1]);
+        const tokenA = path[0];
+        const tokenB = path[1];
+        const reserveBeforeVictimTx = await this.#txService.getReserve(tokenA, tokenB);
         const rawVictimTx = await this.#txService.getRawTransactionFromHash(victimTx.hash);
-        const reserveAfterVictimTxOrFailure = await this._getReserveAfterVictimTx(rawVictimTx, path[0], path[1]);
+        const reserveAfterVictimTxOrFailure = await this._getReserveAfterVictimTx(rawVictimTx, tokenA, tokenB);
 
         // If victim tx fails without us interacting with it
         if (reserveAfterVictimTxOrFailure instanceof TransactionFailure) {
-            this.#logger.addErrorForTx(victimTx.hash, `Victim transaction failed: ${reserveAfterVictimTxOrFailure.toString()}`, 2);
+            this.#loggerService.addErrorForTx(victimTx.hash, `Victim transaction failed: ${reserveAfterVictimTxOrFailure.toString()}`, 2);
         } else {
             // Else try frontrunning
             const reserveOutBefore = new BN(reserveBeforeVictimTx.reserveB);
             const reserveOutAfter = new BN(reserveAfterVictimTxOrFailure.reserveB);
             const reserveImpact = reserveOutAfter.minus(reserveOutBefore).div(reserveOutBefore).times(100).toNumber();
-            this.#logger.addInfoForTx(victimTx.hash, `Reserve impact: ${reserveImpact}%`, 2);
+            this.#loggerService.addInfoForTx(victimTx.hash, `Reserve impact: ${reserveImpact}%`, 2);
 
             // Make sure the impact is sufficient enough to overflow fees
             // when reserve decreases price increases
             if (reserveImpact > -1) {
-                this.#logger.addErrorForTx(victimTx.hash, `Impact too low not worth to trade.`, 3);
+                this.#loggerService.addErrorForTx(victimTx.hash, `Impact too low not worth to trade.`, 3);
             } else {
-                this.#logger.addSuccessFortx(victimTx.hash, `Impact interesting, entering trade.`, 3);
+                this.#loggerService.addSuccessFortx(victimTx.hash, `Impact interesting, entering trade.`, 3);
 
                 const reserveIn = new BN(reserveBeforeVictimTx.reserveA);
                 const reserveOut = new BN(reserveBeforeVictimTx.reserveB);
@@ -83,14 +95,15 @@ export class UniBot {
                     reserveOut
                 );
 
-                this.#logger.addInfoForTx(
+                this.#loggerService.addInfoForTx(
                     victimTx.hash,
                     `Calculated token to buy: ${maxTokenToBuy}`,
                     3
                 );
 
-                const approveBuySellTxs = this._buildTransactionsForSandwichAttack(
-                    new BN(victimTx.gasPrice),
+                const victimGasPrice = new BN(victimTx.gasPrice);
+                const transactions = this._buildTransactionsForSandwichAttack(
+                    victimGasPrice,
                     path[0],
                     path[1],
                     maxInvestAmount.toFixed(0, 1),                                          // round down eth invested
@@ -98,17 +111,31 @@ export class UniBot {
                     maxInvestAmount.toFixed(0, 1)                                           // round down eth to get back (as much as invested)
                 );
 
+
+                // Check if token has been approved yet
+                const tokenIsApproved = await this.#tokenService.isApproved(tokenB);
+                if (tokenIsApproved === false) {
+                    const approveTransaction = this._buildApproveTransaction(
+                        victimGasPrice,
+                        tokenB
+                    );
+                    this.#loggerService.addDebugForTx(
+                        victimTx.hash,
+                        `Approve transaction added before the attack`,
+                        3
+                    );
+                    transactions.unshift(approveTransaction);
+                }
+
+
                 // Simulate on ganache
                 const isWorth = await this._simulateSandwichAttackOnGanache(
                     victimTx,
-                    rawVictimTx,
-                    approveBuySellTxs[0],
-                    approveBuySellTxs[1],
-                    approveBuySellTxs[2],
+                    transactions
                 );
 
                 if (this.#attackInProcess) {
-                    this.#logger.addErrorForTx(
+                    this.#loggerService.addErrorForTx(
                         victimTx.hash,
                         `An attack is already processing, abandon`,
                         3
@@ -117,34 +144,47 @@ export class UniBot {
 
                 if (isWorth && this.#attackInProcess === false) {
                     this.#attackInProcess = true;
-                    // await this.frontRun(
-                    //     blockNumber,
-                    //     approveBuySellTxs[0],
-                    //     approveBuySellTxs[1],
-                    //     approveBuySellTxs[2]
-                    // );
+                    const voidOrTransactionFailure = await this.frontRun(
+                        victimTx.hash,
+                        blockNumber,
+                        transactions
+                    );
                     this.#attackInProcess = false;
+
+                    if (voidOrTransactionFailure instanceof TransactionFailure) {
+                        this.#loggerService.addErrorForTx(victimTx.hash, `Transaction failed on mainnet: ${voidOrTransactionFailure.toString()}`, 4);
+
+                        // if the approval transaction did not fail we need to update the db as well
+                        if (voidOrTransactionFailure.getMethod() !== "RAW_TX") {
+                            await this.#tokenService.approveToken(tokenB);
+                        }
+
+                    } else {
+                        // If we sent an approve tx, add the token to the approved list on database
+                        if (tokenIsApproved == false) {
+                            await this.#tokenService.approveToken(tokenB);
+                        }
+                    }
                 }
+
             }
         }
 
-        this.#logger.consumeLogsForTx(victimTx.hash);
+        this.#loggerService.consumeLogsForTx(victimTx.hash);
     }
 
     private async frontRun(
-        startingBlockNumber: number,
         txHash: string,
-        approveTx: BuiltTransactionReadyToSend,
-        buyTx: BuiltTransactionReadyToSend,
-        sellTx: BuiltTransactionReadyToSend,
+        startingBlockNumber: number,
+        transactions: Array<BuiltTransactionReadyToSend | RawTransaction>,
     ): Promise<void | TransactionFailure> {
 
-        this.#logger.addInfoForTx(txHash, "Engaging frontRun process on main net", 5);
+        this.#loggerService.addInfoForTx(txHash, "Engaging frontRun process on main net", 5);
 
         // Check still same block
         const curentBlockNumber = await this.#txService.fetchBlockNumber();
         if (startingBlockNumber != curentBlockNumber) {
-            this.#logger.addErrorForTx(txHash, "Computation took too long, block number has changed", 5);
+            this.#loggerService.addErrorForTx(txHash, "Computation took too long, block number has changed", 5);
             return;
         }
 
@@ -154,9 +194,13 @@ export class UniBot {
         // Send all txs without awaiting for each one
         const txs: Promise<void>[] = [];
         try {
-            txs.push(this.#txService.sendBuiltTransaction(approveTx));
-            txs.push(this.#txService.sendBuiltTransaction(buyTx));
-            txs.push(this.#txService.sendBuiltTransaction(sellTx));
+            for (const tx of transactions) {
+                if (typeof tx === "string") {
+                    txs.push(this.#txService.sendRawTransaction(tx));
+                } else {
+                    txs.push(this.#txService.sendBuiltTransaction(tx));
+                }
+            }
             await Promise.all(txs);
         } catch (txFailure) {
             return txFailure;
@@ -166,9 +210,9 @@ export class UniBot {
 
         const profit = new BN(balancAfter).minus(new BN(balanceBefore));
         if (profit.gt(0)) {
-            this.#logger.addSuccessFortx(txHash, `Trade worth, won ${this.#txService.convertToEth(profit.toString())}`, 5);
+            this.#loggerService.addSuccessFortx(txHash, `Trade worth, won ${this.#txService.convertToEth(profit.toString())}`, 5);
         } else {
-            this.#logger.addErrorForTx(txHash, `Trade NOT worth, lost ${this.#txService.convertToEth(profit.toString())}`, 5);
+            this.#loggerService.addErrorForTx(txHash, `Trade NOT worth, lost ${this.#txService.convertToEth(profit.toString())}`, 5);
         }
 
 
@@ -178,14 +222,10 @@ export class UniBot {
     ////////////////////////////////////////////////////////////////////////////////////////////////
     //                                  FRONT RUN
     /////////////////////////////////////////////////////////////////////////////////////////////////
-    private _buildTransactionsForSandwichAttack(
+    private _buildApproveTransaction(
         victimGasPrice: BN,
-        tokenA: string,
         tokenB: string,
-        amountToInvest: string,
-        amountTokenToBuy: string,
-        amountOutMin: string,
-    ): [BuiltTransactionReadyToSend, BuiltTransactionReadyToSend, BuiltTransactionReadyToSend] {
+    ): BuiltTransactionReadyToSend {
 
         const currentNonce = this.#txService.getCurrentNonce();
 
@@ -199,6 +239,28 @@ export class UniBot {
                 "115792089237316195423570985008687907853269984665640564039457584007913129639935"        // UNIT256MAX -1
             ]
         );
+        return {
+            transaction: approveTx,
+            sendParams: {
+                from: process.env.ETH_PUBLIC_KEY!,
+                gas: 60000,
+                gasPrice: victimGasPrice.plus(10000001),
+                nonce: currentNonce + 1,
+                to: tokenB,
+            },
+        };
+    }
+
+    private _buildTransactionsForSandwichAttack(
+        victimGasPrice: BN,
+        tokenA: string,
+        tokenB: string,
+        amountToInvest: string,
+        amountTokenToBuy: string,
+        amountOutMin: string,
+    ): [BuiltTransactionReadyToSend, BuiltTransactionReadyToSend] {
+
+        const currentNonce = this.#txService.getCurrentNonce();
 
         const buyTx = this.#transactionfactory.createUniswapTransaction(
             TransactionType.onGanache,
@@ -225,16 +287,6 @@ export class UniBot {
 
         return [
             {
-                transaction: approveTx,
-                sendParams: {
-                    from: process.env.ETH_PUBLIC_KEY!,
-                    gas: 60000,
-                    gasPrice: victimGasPrice.plus(10000001),
-                    nonce: currentNonce + 1,
-                    to: tokenB,
-                },
-            },
-            {
                 transaction: buyTx,
                 sendParams: {
                     from: process.env.ETH_PUBLIC_KEY!,
@@ -260,48 +312,39 @@ export class UniBot {
 
     private async _simulateSandwichAttackOnGanache(
         victimTx: Web3_Transaction,
-        rawVictimTx: RawTransaction,
-        approveTx: BuiltTransactionReadyToSend,
-        buyTx: BuiltTransactionReadyToSend,
-        sellTx: BuiltTransactionReadyToSend,
-    ) {
+        transactions: Array<BuiltTransactionReadyToSend | RawTransaction>
+
+    ): Promise<boolean> {
         const previousBalance = await this._getGanacheBalance();
 
         const t1 = new Date().getTime();
-        const simualationBoxOrTransactionFailure = await this._simulateTransactions(
-            [
-                approveTx,
-                buyTx,
-                rawVictimTx,
-                sellTx
-            ]
-        );
+        const simualationBoxOrTransactionFailure = await this._simulateTransactions(transactions);
 
         const t2 = new Date().getTime();
-        this.#logger.addInfoForTx(victimTx.hash, `Sandwich attack simulated in ${t2 - t1}ms`, 4);
+        this.#loggerService.addInfoForTx(victimTx.hash, `Sandwich attack simulated in ${t2 - t1}ms`, 4);
 
         // Handle any transaction errors
         if (simualationBoxOrTransactionFailure instanceof TransactionFailure) {
-            this.#logger.addErrorForTx(victimTx.hash, `Transaction failed: ${simualationBoxOrTransactionFailure.toString()}`, 4);
-            this.#logger.consumeLogsForTx(victimTx.hash);
+            this.#loggerService.addErrorForTx(victimTx.hash, `Transaction failed: ${simualationBoxOrTransactionFailure.toString()}`, 4);
+            this.#loggerService.consumeLogsForTx(victimTx.hash);
             return false;
         } else {
 
             // Check if profit has been made
             const newBalance = await simualationBoxOrTransactionFailure.getBalance();
-            this.#logger.addInfoForTx(victimTx.hash, `Balance before attack: ${previousBalance}`, 4);
-            this.#logger.addInfoForTx(victimTx.hash, `Balance after attack: ${newBalance}`, 4);
+            this.#loggerService.addInfoForTx(victimTx.hash, `Balance before attack: ${previousBalance}`, 4);
+            this.#loggerService.addInfoForTx(victimTx.hash, `Balance after attack: ${newBalance}`, 4);
             const wonAmount = new BN(newBalance).minus(new BN(previousBalance));
 
             if (wonAmount.gt(0)) {
-                this.#logger.addSuccessFortx(
+                this.#loggerService.addSuccessFortx(
                     victimTx.hash,
                     `Trade worth, won ${this.#txService.convertToEth(wonAmount.toString())}`,
                     4
                 );
                 return true;
             } else {
-                this.#logger.addErrorForTx(victimTx.hash, `Trade not worth`, 4);
+                this.#loggerService.addErrorForTx(victimTx.hash, `Trade not worth`, 4);
                 return false;
             }
         }
@@ -317,10 +360,10 @@ export class UniBot {
         const amountOutMin = new BN(decodedTxMethod.params.find(txParam => txParam.name === "amountOutMin")!.value as string);
         const amountIn = new BN(victimTx.value);
 
-        this.#logger.addInfoForTx(victimTx.hash, `Reserve in: ${reserveIn}`, 3);
-        this.#logger.addInfoForTx(victimTx.hash, `Reserve out: ${reserveOut}`, 3);
-        this.#logger.addInfoForTx(victimTx.hash, `amountIn: ${amountIn}`, 3);
-        this.#logger.addInfoForTx(victimTx.hash, `amountOutMin: ${amountOutMin}`, 3);
+        this.#loggerService.addInfoForTx(victimTx.hash, `Reserve in: ${reserveIn}`, 3);
+        this.#loggerService.addInfoForTx(victimTx.hash, `Reserve out: ${reserveOut}`, 3);
+        this.#loggerService.addInfoForTx(victimTx.hash, `amountIn: ${amountIn}`, 3);
+        this.#loggerService.addInfoForTx(victimTx.hash, `amountOutMin: ${amountOutMin}`, 3);
 
         // Max eth to invest to make as much profit as possible when selling back
         const t1 = new Date().getTime();
@@ -332,12 +375,12 @@ export class UniBot {
             amountOutMin
         );
         const t2 = new Date().getTime();
-        this.#logger.addInfoForTx(victimTx.hash, `Dichotomie done in ${t2 - t1}ms`, 4);
+        this.#loggerService.addInfoForTx(victimTx.hash, `Dichotomie done in ${t2 - t1}ms`, 4);
 
         // Do not risk to much, clip max invest to MAX_ETH_INVEST
         if (maxInvestAmount.gt(MAX_ETH_INVEST)) {
             const maxEthInEth = this.#txService.convertToEth(MAX_ETH_INVEST.toString());
-            this.#logger.addInfoForTx(victimTx.hash, `Invest amount to high, clipping to ${MAX_ETH_INVEST}(${maxEthInEth} ETH)`, 4);
+            this.#loggerService.addInfoForTx(victimTx.hash, `Invest amount to high, clipping to ${MAX_ETH_INVEST}(${maxEthInEth} ETH)`, 4);
             maxInvestAmount = MAX_ETH_INVEST;
         }
         return maxInvestAmount;
@@ -403,8 +446,8 @@ export class UniBot {
         }
 
         if (xTooBig) {
-            let difference = amountOutMin.minus(amountOut);
-            this.#logger.addInfoForTx(
+            const difference = amountOutMin.minus(amountOut);
+            this.#loggerService.addInfoForTx(
                 txHash,
                 `x was too big, taking last x ${previousBestPossibleX.toFixed(0, 1)}(Difference: ${difference.toFixed(4)})`,
                 4

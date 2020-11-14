@@ -1,4 +1,4 @@
-import { MongoClient, Db, Collection, InsertOneWriteOpResult } from 'mongodb';
+import { MongoClient, Db, Collection } from 'mongodb';
 
 export default class Database {
 
@@ -12,7 +12,7 @@ export default class Database {
     public static async connectDatabase(databaseUrl, dbname): Promise<Database> {
         if (this._db == null) {
             try {
-                let connection = await MongoClient.connect(`${databaseUrl}/?authSource=${dbname}`, { useUnifiedTopology: true, connectTimeoutMS: 5000, serverSelectionTimeoutMS: 5000 });
+                const connection = await MongoClient.connect(`${databaseUrl}/?authSource=${dbname}`, { useUnifiedTopology: true, connectTimeoutMS: 5000, serverSelectionTimeoutMS: 5000 });
                 Database._db = new Database(connection.db(dbname));
             } catch (e) {
                 throw e;

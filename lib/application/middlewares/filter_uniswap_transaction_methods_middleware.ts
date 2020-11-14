@@ -18,7 +18,7 @@ export class FilterUniswapTxMethodsMiddleware extends ITransactionMiddleware {
     ): Promise<boolean> {
 
         // check if we monitor the decoded tx method
-        let txMethod: ParsedTransactionMethod = tx["decodedMethod"]
+        let txMethod: ParsedTransactionMethod = tx["decodedMethod"];
         if (TRANSACTION_METHODS.includes(txMethod.name)) {
 
             // Only select pair transaction so that eth => btc => sushi won't be monitored for example

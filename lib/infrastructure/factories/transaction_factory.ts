@@ -81,7 +81,7 @@ export class TransactionFactory implements ITransactionFactory {
                 break;
         }
 
-        let tx = uniswapContract.methods[method](...methodParams);
+        const tx = uniswapContract.methods[method](...methodParams);
         return tx;
     }
 

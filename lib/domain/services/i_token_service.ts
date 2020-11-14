@@ -8,9 +8,10 @@ export interface ITokenService {
         address: string
     ): Promise<boolean>;
 
-    // has the token be approved for transfer from uniswap smartcontract ?
     isApproved(
         address: string
     ): Promise<boolean>;
+
+    approveToken(address: string): Promise<void>
 
 }

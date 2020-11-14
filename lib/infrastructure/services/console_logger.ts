@@ -85,9 +85,9 @@ export class ConsoleLogger implements ILoggerService {
         msg: string
     ) {
         if (this.#logGeneralInfo) {
-            let currentdate = new Date();
-            let dateTime = currentdate.toLocaleString('en-GB', dateOption).replace(',', '');
-            let loggedLine = `${dateTime}\t${msg}`;
+            const currentdate = new Date();
+            const dateTime = currentdate.toLocaleString('en-GB', dateOption).replace(',', '');
+            const loggedLine = `${dateTime}\t${msg}`;
             console.log(loggedLine);
         }
     }
@@ -98,9 +98,9 @@ export class ConsoleLogger implements ILoggerService {
         indent: number
     ): void {
 
-        let currentdate = new Date();
-        let dateTime = currentdate.toLocaleString('en-GB', dateOption).replace(',', '');
-        let loggedLine = `${dateTime}\t${'\t'.repeat(indent)}${msg}\n`;
+        const currentdate = new Date();
+        const dateTime = currentdate.toLocaleString('en-GB', dateOption).replace(',', '');
+        const loggedLine = `${dateTime}\t${'\t'.repeat(indent)}${msg}\n`;
 
         if (txHash in this.#logBuffer) {
             this.#logBuffer[txHash] = this.#logBuffer[txHash].concat(loggedLine);

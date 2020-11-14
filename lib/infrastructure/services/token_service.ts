@@ -10,18 +10,24 @@ export class TokenService implements ITokenService {
     }
 
     async isAllowlisted(address: string): Promise<boolean> {
-        let token = await this.#tr.findOne(address);
+        const token = await this.#tr.findOne(address);
         return token ? token.isAllowlisted : false;
     }
 
     async isBlocklisted(address: string): Promise<boolean> {
-        let token = await this.#tr.findOne(address);
+        const token = await this.#tr.findOne(address);
         return token ? token.isBlocklisted : false;
     }
 
     async isApproved(address: string): Promise<boolean> {
-        let token = await this.#tr.findOne(address);
+        const token = await this.#tr.findOne(address);
         return token ? token.isApproved : false;
     }
 
+    async approveToken(address: string): Promise<void> {
+        await this.#tr.updateOne(
+            address,
+            { "isApproved": true, }
+        )
+    }
 }

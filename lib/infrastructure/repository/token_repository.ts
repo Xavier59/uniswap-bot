@@ -10,9 +10,19 @@ export default class TokenRepository {
         this.#collection = Database.getCollection("tokens");
     }
 
-    findOne(
+    async findOne(
         item: string
     ): Promise<DbToken | null> {
-        return this.#collection.findOne({ address: item.toLowerCase() })
+        return await this.#collection.findOne({ "address": item.toLowerCase() })
+    }
+
+    async updateOne(
+        item: string,
+        data: {}
+    ): Promise<void> {
+        this.#collection.updateOne(
+            { "address": item.toLowerCase() },
+            { $set: data }
+        );
     }
 }

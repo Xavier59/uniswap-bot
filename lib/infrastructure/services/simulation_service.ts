@@ -52,13 +52,13 @@ export class SimulationService implements ISimulationService {
     async sendBuiltTransaction(
         tx: BuiltTransactionReadyToSend,
     ) {
-        let params = {
+        const params = {
             ...tx.sendParams,
             data: (tx.transaction as any).encodeABI(),
         };
 
         try {
-            let signedTransaction = await this.#web3Ganache.eth.accounts.signTransaction(
+            const signedTransaction = await this.#web3Ganache.eth.accounts.signTransaction(
                 params,
                 process.env.ETH_PRIVATE_KEY!
             );

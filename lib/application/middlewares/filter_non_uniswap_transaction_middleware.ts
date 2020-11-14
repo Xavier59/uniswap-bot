@@ -3,8 +3,7 @@ import { ITransactionMiddleware } from "./i_transaction_middleware";
 import { ILoggerService } from "../../domain/services/i_logger_service";
 import { UNISWAP_CONTRACT_ADDR } from "../../config";
 
-export class FilterNonUniswapTxMiddleware extends ITransactionMiddleware {
-
+export class FilterNonUniswapTransactionMiddleware extends ITransactionMiddleware {
 
     constructor(
         logger: ILoggerService,
