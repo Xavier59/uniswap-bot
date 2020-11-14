@@ -126,6 +126,7 @@ export class UniBot {
                 }
 
                 const sandwitchAttackTxs = this._buildTransactionsForSandwichAttack(
+                    blockNumber + 1,
                     nonce,
                     victimGasPrice,
                     path[0],
@@ -274,6 +275,7 @@ export class UniBot {
     }
 
     private _buildTransactionsForSandwichAttack(
+        nextBlockNumber: number,
         currentNonce: number,
         victimGasPrice: BN,
         tokenA: string,
@@ -290,7 +292,7 @@ export class UniBot {
                 amountTokenToBuy,                                           // amoutTokenOut
                 [tokenA, tokenB],                                           // Pair
                 process.env.ETH_PUBLIC_KEY,                                 // Wallet
-                Math.floor(new Date().getTime() / 1000) + 180               // Timestamp
+                nextBlockNumber                                             // Block number required for our custom contract
             ]
         );
 
@@ -302,7 +304,7 @@ export class UniBot {
                 amountOutMin,                                               // amountOutMin
                 [tokenB, tokenA],                                           // Pairs
                 process.env.ETH_PUBLIC_KEY,                                 // Wallet
-                Math.floor(new Date().getTime() / 1000) + 180               // Timestamp
+                nextBlockNumber                                             // Block number required for our custom contract
             ]
         );
 
@@ -339,16 +341,14 @@ export class UniBot {
 
     ): Promise<boolean> {
 
-        const ganacheTxs: Array<BuiltTransactionReadyToSend | RawTransaction> = []
+        const ganacheTxs: Array<BuiltTransactionReadyToSend | RawTransaction> = [...transactions]
+
+        // If the txs contains the approve tx
+        // insert the victim tx to the appropriate index
         if (hasApprove) {
-            ganacheTxs.push(transactions[0]);
-            ganacheTxs.push(transactions[1]);
-            ganacheTxs.push(victimTx);
-            ganacheTxs.push(transactions[2]);
+            ganacheTxs.splice(2, 0, victimTx)
         } else {
-            ganacheTxs.push(transactions[0]);
-            ganacheTxs.push(victimTx);
-            ganacheTxs.push(transactions[1]);
+            ganacheTxs.splice(1, 0, victimTx)
         }
 
         const previousBalance = await this._getGanacheBalance();

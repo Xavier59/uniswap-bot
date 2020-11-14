@@ -1,6 +1,6 @@
 import Web3 from "web3";
 import { Contract } from "web3-eth-contract"
-import { UNISWAP_CONTRACT_ADDR } from "../../config";
+import { CUSTOM_CONTRACT_ADDR, UNISWAP_CONTRACT_ADDR } from "../../config";
 import { ERC20Methods, ITransactionFactory, TransactionType, UniswapMethods } from "../../domain/factories/i_transaction_factory";
 import { BuiltTransaction, BuiltTransactionMethodParams } from "../../domain/value_types/built_transaction";
 
@@ -9,8 +9,11 @@ export class TransactionFactory implements ITransactionFactory {
     #web3MainNet: Web3;
     #web3Ganache: Web3;
 
-    #mainNetUniswapContract: Contract;
-    #ganacheUniswapContract: Contract;
+    #mainNetUniswapContract: Contract;      // To build main net tx
+    #ganacheUniswapContract: Contract;      // To build ganache tx
+
+    #mainNetCustomUniswapContract: Contract;    // To build mainnet tx using our custom contrat
+    #ganacheCustomUniswapContract: Contract;    // To build ganache tx using our custom contrat
 
     #ERC20Abi: Object;
 
@@ -30,7 +33,10 @@ export class TransactionFactory implements ITransactionFactory {
 
         // Since we can perrsist uniswap contract, save for instancianting new contract for each tx
         this.#mainNetUniswapContract = new web3MainNet.eth.Contract(uniswapAbi, UNISWAP_CONTRACT_ADDR);
+        this.#mainNetCustomUniswapContract = new web3MainNet.eth.Contract(uniswapAbi, CUSTOM_CONTRACT_ADDR);
+
         this.#ganacheUniswapContract = new web3Ganache.eth.Contract(uniswapAbi, UNISWAP_CONTRACT_ADDR);
+        this.#ganacheCustomUniswapContract = new web3Ganache.eth.Contract(uniswapAbi, CUSTOM_CONTRACT_ADDR);
     }
 
     createErc20Transaction(
@@ -65,23 +71,29 @@ export class TransactionFactory implements ITransactionFactory {
         methodParams: BuiltTransactionMethodParams
     ): BuiltTransaction {
 
-        let uniswapContract: Contract;
+        let contract: Contract;
 
         switch (txType) {
             case TransactionType.onMainNet:
-                uniswapContract = this.#mainNetUniswapContract;
+                contract = this.#mainNetUniswapContract;
+                if (method === UniswapMethods.swapETHForExactTokens) {
+                    contract = this.#mainNetCustomUniswapContract;
+                }
                 break;
 
             case TransactionType.onGanache:
-                uniswapContract = this.#ganacheUniswapContract;
+                contract = this.#ganacheUniswapContract;
+                if (method === UniswapMethods.swapETHForExactTokens) {
+                    contract = this.#ganacheCustomUniswapContract;
+                }
                 break;
 
             default:
-                uniswapContract = this.#ganacheUniswapContract;
+                contract = this.#ganacheUniswapContract;
                 break;
         }
 
-        const tx = uniswapContract.methods[method](...methodParams);
+        const tx = contract.methods[method](...methodParams);
         return tx;
     }
 

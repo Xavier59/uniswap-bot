@@ -35,6 +35,7 @@ export class TransactionService implements ITransactionService {
 
     }
 
+
     async init(): Promise<void> {
         this.#web3.eth.extend({
             methods: [{
