@@ -83,9 +83,6 @@ export class TransactionFactory implements ITransactionFactory {
 
             case TransactionType.onGanache:
                 contract = this.#ganacheUniswapContract;
-                if (method === UniswapMethods.swapETHForExactTokens) {
-                    contract = this.#ganacheCustomUniswapContract;
-                }
                 break;
 
             default:
