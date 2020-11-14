@@ -8,8 +8,9 @@ import BN from "bignumber.js";
 import { ISimulationBoxBuilder } from "../factories/i_simulation_box_builder";
 import { ERC20Methods, ITransactionFactory, TransactionType, UniswapMethods } from "../factories/i_transaction_factory";
 import { MAX_ETH_INVEST, UNISWAP_CONTRACT_ADDR } from "../../config";
-import { BuiltTransaction } from "../value_types/built_transaction";
+import { BuiltTransaction, BuiltTransactionReadyToSend } from "../value_types/built_transaction";
 import { TransactionFailure } from "../failures/transaction_failure";
+import { SimulationBox } from "./simulation_box";
 
 export class UniBot {
 
@@ -17,6 +18,7 @@ export class UniBot {
     #transactionfactory: ITransactionFactory;
     #simulationBoxBuilder: ISimulationBoxBuilder;
     #logger: ILoggerService;
+    #attackInProcess: boolean;
 
     constructor(
         txService: ITransactionService,
@@ -28,30 +30,33 @@ export class UniBot {
         this.#logger = logger;
         this.#simulationBoxBuilder = simulationBoxBuilder;
         this.#transactionfactory = transactionfactory;
+        this.#attackInProcess = false;
     }
 
     async processTx(
         victimTx: Web3_Transaction
     ) {
+        const blockNumber = await this.#txService.fetchBlockNumber();
+
         this.#logger.addSuccessFortx(victimTx.hash, `Tx ${victimTx.hash} received by the bot`, 2);
 
         // Call get reserve custom amoutIn amoutOut
-        let txMethod: ParsedTransactionMethod = victimTx["decodedMethod"];
-        let path = txMethod.params.find(txParam => txParam.name == "path")!.value;
+        const txMethod: ParsedTransactionMethod = victimTx["decodedMethod"];
+        const path = txMethod.params.find(txParam => txParam.name == "path")!.value as string[];
 
         // Compute reserve impact
-        let reserveBeforeVictimTx = await this._getReserve(path[0], path[1]);
-        let rawVictimTx = await this.#txService.getRawTxFromHash(victimTx.hash);
-        let reserveAfterVictimTxOrFailure = await this._getReserveAfterVictimTx(rawVictimTx, path[0], path[1]);
+        const reserveBeforeVictimTx = await this.#txService.getReserve(path[0], path[1]);
+        const rawVictimTx = await this.#txService.getRawTransactionFromHash(victimTx.hash);
+        const reserveAfterVictimTxOrFailure = await this._getReserveAfterVictimTx(rawVictimTx, path[0], path[1]);
 
-        // If victim tx fail without us interacting with it
+        // If victim tx fails without us interacting with it
         if (reserveAfterVictimTxOrFailure instanceof TransactionFailure) {
             this.#logger.addErrorForTx(victimTx.hash, `Victim transaction failed: ${reserveAfterVictimTxOrFailure.toString()}`, 2);
         } else {
             // Else try frontrunning
-            let reserveOutBefore = new BN(reserveBeforeVictimTx.reserveB);
-            let reserveOutAfter = new BN(reserveAfterVictimTxOrFailure.reserveB);
-            let reserveImpact = reserveOutAfter.minus(reserveOutBefore).div(reserveOutBefore).times(100).toNumber();
+            const reserveOutBefore = new BN(reserveBeforeVictimTx.reserveB);
+            const reserveOutAfter = new BN(reserveAfterVictimTxOrFailure.reserveB);
+            const reserveImpact = reserveOutAfter.minus(reserveOutBefore).div(reserveOutBefore).times(100).toNumber();
             this.#logger.addInfoForTx(victimTx.hash, `Reserve impact: ${reserveImpact}%`, 2);
 
             // Make sure the impact is sufficient enough to overflow fees
@@ -61,101 +66,64 @@ export class UniBot {
             } else {
                 this.#logger.addSuccessFortx(victimTx.hash, `Impact interesting, entering trade.`, 3);
 
+                const reserveIn = new BN(reserveBeforeVictimTx.reserveA);
+                const reserveOut = new BN(reserveBeforeVictimTx.reserveB);
+
                 // Compute eth to invest to make a worthy trade
-                let decodedTxMethod: ParsedTransactionMethod = victimTx["decodedMethod"];
-                let amountOutMin = new BN(decodedTxMethod.params.find(txParam => txParam.name === "amountOutMin")!.value as string);
-                let amountIn = new BN(victimTx.value);
-
-                let reserveIn = new BN(reserveBeforeVictimTx.reserveA);
-                let reserveOut = new BN(reserveBeforeVictimTx.reserveB);
-
-                this.#logger.addInfoForTx(victimTx.hash, `Reserve in: ${reserveIn}`, 3);
-                this.#logger.addInfoForTx(victimTx.hash, `Reserve out: ${reserveOut}`, 3);
-
-                // Max eth to invest to make as much profit as possible when selling back
-                let investAmounts = this._getMaxAmountIn(
+                const maxInvestAmount = this._computeEthToInvest(
+                    victimTx,
                     reserveIn,
                     reserveOut,
-                    amountIn,
-                    amountOutMin
                 );
 
-                let minInvestAmount = investAmounts[0];
-                let maxInvestAmount = investAmounts[1];
-
-                this.#logger.addInfoForTx(
-                    victimTx.hash,
-                    `Calculated x1; x2 (${minInvestAmount}, ${maxInvestAmount})`,
-                    3
+                // Compute how many token we can get for the eth amount invested
+                const maxTokenToBuy = this._getAmountOut(
+                    maxInvestAmount,
+                    reserveIn,
+                    reserveOut
                 );
 
                 this.#logger.addInfoForTx(
                     victimTx.hash,
-                    `Calculated max ETH amount to invest: ${maxInvestAmount.toFixed(4)} (${this.#txService.convertToEth(maxInvestAmount.toFixed(0, 4))} ETH)`,
+                    `Calculated token to buy: ${maxTokenToBuy}`,
                     3
                 );
 
-                // Equation solutions cna both be negative in wich case leave here
-                if (maxInvestAmount.lte(0)) {
-                    this.#logger.addErrorForTx(victimTx.hash, `Invest amount is negative !`, 3);
-                } else {
+                const approveBuySellTxs = this._buildTransactionsForSandwichAttack(
+                    new BN(victimTx.gasPrice),
+                    path[0],
+                    path[1],
+                    maxInvestAmount.toFixed(0, 1),                                          // round down eth invested
+                    maxTokenToBuy.toFixed(0, 1),                                            // round down tokens to buy
+                    maxInvestAmount.toFixed(0, 1)                                           // round down eth to get back (as much as invested)
+                );
 
-                    // Do not risk to much, clip max invest to MAX_ETH_INVEST
-                    if (maxInvestAmount.gt(MAX_ETH_INVEST)) {
-                        this.#logger.addInfoForTx(victimTx.hash, `Invest amount to high, clipping to ${MAX_ETH_INVEST}`, 3);
-                        maxInvestAmount = MAX_ETH_INVEST;
-                    }
+                // Simulate on ganache
+                const isWorth = await this._simulateSandwichAttackOnGanache(
+                    victimTx,
+                    rawVictimTx,
+                    approveBuySellTxs[0],
+                    approveBuySellTxs[1],
+                    approveBuySellTxs[2],
+                );
 
-                    // Compute how many token we can get for the eth amount invested
-                    let maxTokenToBuy = this._getAmountOut(
-                        maxInvestAmount,
-                        reserveIn,
-                        reserveOut
-                    );
-
-                    this.#logger.addInfoForTx(
+                if (this.#attackInProcess) {
+                    this.#logger.addErrorForTx(
                         victimTx.hash,
-                        `Calculated token to buy: ${maxTokenToBuy}`,
+                        `An attack is already processing, abandon`,
                         3
                     );
+                }
 
-                    // Simulate on ganache
-                    let previousBalance = await this._getGanacheBalance();
-                    let startTime = new Date().getTime();
-
-                    let newBalanceOrFailure = await this._simulateSandwichAttack(
-                        new BN(victimTx.gasPrice),
-                        rawVictimTx,
-                        path[0],
-                        path[1],
-                        maxInvestAmount.toFixed(0, 1),                                          // round down eth invested
-                        maxTokenToBuy.toFixed(0, 1),                                            // round down tokens to buy
-                        maxInvestAmount.toFixed(0, 1)                                           // round down eth to get back
-                    );
-                    let endTime = new Date().getTime();
-                    this.#logger.addInfoForTx(victimTx.hash, `Sandwich attack simulated in ${endTime - startTime}ms`, 4);
-
-                    // Handle any transaction errors
-                    if (newBalanceOrFailure instanceof TransactionFailure) {
-                        this.#logger.addErrorForTx(victimTx.hash, `Transaction failed: ${newBalanceOrFailure.toString()}`, 4);
-                        this.#logger.consumeLogsForTx(victimTx.hash);
-                        //process.exit();
-                    } else {
-                        this.#logger.addInfoForTx(victimTx.hash, `Balance before attack: ${previousBalance}`, 4);
-                        this.#logger.addInfoForTx(victimTx.hash, `Balance after attack: ${newBalanceOrFailure}`, 4);
-                        let wonAmount = new BN(newBalanceOrFailure).minus(new BN(previousBalance));
-
-                        // Check if profit has been made
-                        if (wonAmount.gt(0)) {
-                            this.#logger.addSuccessFortx(
-                                victimTx.hash,
-                                `Trade worth, won ${this.#txService.convertToEth(wonAmount.toString())}`,
-                                4
-                            );
-                        } else {
-                            this.#logger.addErrorForTx(victimTx.hash, `Trade not worth`, 4);
-                        }
-                    }
+                if (isWorth && this.#attackInProcess === false) {
+                    this.#attackInProcess = true;
+                    // await this.frontRun(
+                    //     blockNumber,
+                    //     approveBuySellTxs[0],
+                    //     approveBuySellTxs[1],
+                    //     approveBuySellTxs[2]
+                    // );
+                    this.#attackInProcess = false;
                 }
             }
         }
@@ -163,45 +131,66 @@ export class UniBot {
         this.#logger.consumeLogsForTx(victimTx.hash);
     }
 
-    private async _getGanacheBalance() {
-        return this.#simulationBoxBuilder.copy().build().getBalance();
-    }
+    private async frontRun(
+        startingBlockNumber: number,
+        txHash: string,
+        approveTx: BuiltTransactionReadyToSend,
+        buyTx: BuiltTransactionReadyToSend,
+        sellTx: BuiltTransactionReadyToSend,
+    ): Promise<void | TransactionFailure> {
 
-    private async _getReserve(
-        tokenA: string,
-        tokenB: string
-    ): Promise<TransactionPairReserves> {
-        return await this.#txService.getReserve(tokenA, tokenB);
-    }
+        this.#logger.addInfoForTx(txHash, "Engaging frontRun process on main net", 5);
 
-    private async _getReserveAfterVictimTx(
-        victimTx: RawTransaction,
-        tokenA: string,
-        tokenB: string
-    ): Promise<TransactionPairReserves | TransactionFailure> {
-        let simulationBox = this.#simulationBoxBuilder.copy().addTx(victimTx).build();
-        let voidOrTransactionFailure = await simulationBox.simulate();
-
-        if (voidOrTransactionFailure instanceof TransactionFailure) {
-            return voidOrTransactionFailure;
+        // Check still same block
+        const curentBlockNumber = await this.#txService.fetchBlockNumber();
+        if (startingBlockNumber != curentBlockNumber) {
+            this.#logger.addErrorForTx(txHash, "Computation took too long, block number has changed", 5);
+            return;
         }
-        return await simulationBox.getSimulationReserves(tokenA, tokenB);
+
+        // Get initial balance
+        const balanceBefore = await this.#txService.getBalance();
+
+        // Send all txs without awaiting for each one
+        const txs: Promise<void>[] = [];
+        try {
+            txs.push(this.#txService.sendBuiltTransaction(approveTx));
+            txs.push(this.#txService.sendBuiltTransaction(buyTx));
+            txs.push(this.#txService.sendBuiltTransaction(sellTx));
+            await Promise.all(txs);
+        } catch (txFailure) {
+            return txFailure;
+        }
+
+        const balancAfter = await this.#txService.getBalance();
+
+        const profit = new BN(balancAfter).minus(new BN(balanceBefore));
+        if (profit.gt(0)) {
+            this.#logger.addSuccessFortx(txHash, `Trade worth, won ${this.#txService.convertToEth(profit.toString())}`, 5);
+        } else {
+            this.#logger.addErrorForTx(txHash, `Trade NOT worth, lost ${this.#txService.convertToEth(profit.toString())}`, 5);
+        }
+
+
+        this.#txService
     }
 
-    private async _simulateSandwichAttack(
+    ////////////////////////////////////////////////////////////////////////////////////////////////
+    //                                  FRONT RUN
+    /////////////////////////////////////////////////////////////////////////////////////////////////
+    private _buildTransactionsForSandwichAttack(
         victimGasPrice: BN,
-        victimTx: RawTransaction,
         tokenA: string,
         tokenB: string,
         amountToInvest: string,
         amountTokenToBuy: string,
         amountOutMin: string,
-    ): Promise<string | TransactionFailure> {
+    ): [BuiltTransactionReadyToSend, BuiltTransactionReadyToSend, BuiltTransactionReadyToSend] {
 
-        let currentNonce = this.#txService.getCurrentNonce();
+        const currentNonce = this.#txService.getCurrentNonce();
 
         // Approval transaction
-        let approveTx: BuiltTransaction = this.#transactionfactory.createErc20Transaction(
+        const approveTx: BuiltTransaction = this.#transactionfactory.createErc20Transaction(
             TransactionType.onGanache,
             tokenB,
             ERC20Methods.approve,
@@ -211,7 +200,7 @@ export class UniBot {
             ]
         );
 
-        let buyTx = this.#transactionfactory.createUniswapTransaction(
+        const buyTx = this.#transactionfactory.createUniswapTransaction(
             TransactionType.onGanache,
             UniswapMethods.swapETHForExactTokens,
             [
@@ -222,7 +211,7 @@ export class UniBot {
             ]
         );
 
-        let sellTx = this.#transactionfactory.createUniswapTransaction(
+        const sellTx = this.#transactionfactory.createUniswapTransaction(
             TransactionType.onGanache,
             UniswapMethods.swapExactTokensForETH,
             [
@@ -234,9 +223,8 @@ export class UniBot {
             ]
         );
 
-        let simulationBox = this.#simulationBoxBuilder
-            .copy()
-            .addTx({
+        return [
+            {
                 transaction: approveTx,
                 sendParams: {
                     from: process.env.ETH_PUBLIC_KEY!,
@@ -245,8 +233,8 @@ export class UniBot {
                     nonce: currentNonce + 1,
                     to: tokenB,
                 },
-            })
-            .addTx({
+            },
+            {
                 transaction: buyTx,
                 sendParams: {
                     from: process.env.ETH_PUBLIC_KEY!,
@@ -256,9 +244,8 @@ export class UniBot {
                     nonce: currentNonce + 2,
                     to: UNISWAP_CONTRACT_ADDR,
                 }
-            })
-            .addTx(victimTx)
-            .addTx({
+            },
+            {
                 transaction: sellTx,
                 sendParams: {
                     from: process.env.ETH_PUBLIC_KEY!,
@@ -267,44 +254,164 @@ export class UniBot {
                     nonce: currentNonce + 3,
                     to: UNISWAP_CONTRACT_ADDR,
                 }
-            })
-            .build();
-
-        let voidOrFailure = await simulationBox.simulate();
-        if (typeof voidOrFailure === "object") {
-            return voidOrFailure;
-        } else {
-            let balance = await simulationBox.getBalance();
-            return balance;
-        }
-
+            }
+        ];
     }
 
-    private _getMaxAmountIn(
+    private async _simulateSandwichAttackOnGanache(
+        victimTx: Web3_Transaction,
+        rawVictimTx: RawTransaction,
+        approveTx: BuiltTransactionReadyToSend,
+        buyTx: BuiltTransactionReadyToSend,
+        sellTx: BuiltTransactionReadyToSend,
+    ) {
+        const previousBalance = await this._getGanacheBalance();
+
+        const t1 = new Date().getTime();
+        const simualationBoxOrTransactionFailure = await this._simulateTransactions(
+            [
+                approveTx,
+                buyTx,
+                rawVictimTx,
+                sellTx
+            ]
+        );
+
+        const t2 = new Date().getTime();
+        this.#logger.addInfoForTx(victimTx.hash, `Sandwich attack simulated in ${t2 - t1}ms`, 4);
+
+        // Handle any transaction errors
+        if (simualationBoxOrTransactionFailure instanceof TransactionFailure) {
+            this.#logger.addErrorForTx(victimTx.hash, `Transaction failed: ${simualationBoxOrTransactionFailure.toString()}`, 4);
+            this.#logger.consumeLogsForTx(victimTx.hash);
+            return false;
+        } else {
+
+            // Check if profit has been made
+            const newBalance = await simualationBoxOrTransactionFailure.getBalance();
+            this.#logger.addInfoForTx(victimTx.hash, `Balance before attack: ${previousBalance}`, 4);
+            this.#logger.addInfoForTx(victimTx.hash, `Balance after attack: ${newBalance}`, 4);
+            const wonAmount = new BN(newBalance).minus(new BN(previousBalance));
+
+            if (wonAmount.gt(0)) {
+                this.#logger.addSuccessFortx(
+                    victimTx.hash,
+                    `Trade worth, won ${this.#txService.convertToEth(wonAmount.toString())}`,
+                    4
+                );
+                return true;
+            } else {
+                this.#logger.addErrorForTx(victimTx.hash, `Trade not worth`, 4);
+                return false;
+            }
+        }
+    }
+
+    private _computeEthToInvest(
+        victimTx: Web3_Transaction,
+        reserveIn: BN,
+        reserveOut: BN
+    ): BN {
+
+        const decodedTxMethod: ParsedTransactionMethod = victimTx["decodedMethod"];
+        const amountOutMin = new BN(decodedTxMethod.params.find(txParam => txParam.name === "amountOutMin")!.value as string);
+        const amountIn = new BN(victimTx.value);
+
+        this.#logger.addInfoForTx(victimTx.hash, `Reserve in: ${reserveIn}`, 3);
+        this.#logger.addInfoForTx(victimTx.hash, `Reserve out: ${reserveOut}`, 3);
+        this.#logger.addInfoForTx(victimTx.hash, `amountIn: ${amountIn}`, 3);
+        this.#logger.addInfoForTx(victimTx.hash, `amountOutMin: ${amountOutMin}`, 3);
+
+        // Max eth to invest to make as much profit as possible when selling back
+        const t1 = new Date().getTime();
+        let maxInvestAmount = this._computeMaxAmountInToInvest(
+            victimTx.hash,
+            reserveIn,
+            reserveOut,
+            amountIn,
+            amountOutMin
+        );
+        const t2 = new Date().getTime();
+        this.#logger.addInfoForTx(victimTx.hash, `Dichotomie done in ${t2 - t1}ms`, 4);
+
+        // Do not risk to much, clip max invest to MAX_ETH_INVEST
+        if (maxInvestAmount.gt(MAX_ETH_INVEST)) {
+            const maxEthInEth = this.#txService.convertToEth(MAX_ETH_INVEST.toString());
+            this.#logger.addInfoForTx(victimTx.hash, `Invest amount to high, clipping to ${MAX_ETH_INVEST}(${maxEthInEth} ETH)`, 4);
+            maxInvestAmount = MAX_ETH_INVEST;
+        }
+        return maxInvestAmount;
+    }
+
+    private async _getReserveAfterVictimTx(
+        victimTx: RawTransaction,
+        tokenA: string,
+        tokenB: string
+    ): Promise<TransactionPairReserves | TransactionFailure> {
+        const simulationBox = this.#simulationBoxBuilder.copy().addTx(victimTx).build();
+        const voidOrTransactionFailure = await simulationBox.simulate();
+
+        if (voidOrTransactionFailure instanceof TransactionFailure) {
+            return voidOrTransactionFailure;
+        }
+        return await simulationBox.getSimulationReserves(tokenA, tokenB);
+    }
+
+    private _computeMaxAmountInToInvest(
+        txHash: string,
         reserveIn: BN,
         reserveOut: BN,
         amountIn: BN,
         amountOutMin: BN
-    ): [BN, BN] {
-        let a = amountIn;
-        let b = reserveIn;
-        let c = reserveOut;
-        let d = amountOutMin;
+    ): BN {
 
-        let A = new BN("997000").times(amountOutMin);
-        let B = new BN("1997000").times(b.times(d)).plus(new BN("994009").times(a.times(d)));
-        let C = new BN("1000000").times(b.times(b).times(d)).plus(new BN("997000").times(a.times(b.times(d)))).minus(new BN("997000").times(a.times(b.times(c))));
+        let numIter = 10000;
+        let up = reserveIn;
+        let down = new BN("0");
+        let x = up.div(2);
+        let xTooBig = true;
 
-        let delta = (B.times(B)).minus(A.times(C).times(4));
+        let previousBestPossibleX = new BN("0");
+        let amountOut = new BN("0");
 
-        if (delta.lt(0)) {
-            throw new Error("DELTA < 0 not possible !");
+        while (numIter > 0) {
+
+            amountOut = this._getAmountOut(
+                amountIn,
+                reserveIn.plus(x),
+                reserveOut.minus(this._getAmountOut(
+                    x,
+                    reserveIn,
+                    reserveOut,
+                ))
+            );
+
+            if (amountOut.lt(amountOutMin)) {
+                up = x;
+                xTooBig = true;
+            } else if (amountOut.gt(amountOutMin)) {
+                previousBestPossibleX = x;
+                down = x;
+                xTooBig = false;
+            } else {
+                xTooBig = false;
+                break;
+            }
+
+            x = up.plus(down).div(2);
+            numIter -= 1;
         }
 
-        let x1 = (B.negated().minus(delta.squareRoot())).div(a.times(2));
-        let x2 = (B.negated().plus(delta.squareRoot())).div(a.times(2));
+        if (xTooBig) {
+            let difference = amountOutMin.minus(amountOut);
+            this.#logger.addInfoForTx(
+                txHash,
+                `x was too big, taking last x ${previousBestPossibleX.toFixed(0, 1)}(Difference: ${difference.toFixed(4)})`,
+                4
+            );
+        }
 
-        return [x1, x2];
+        return xTooBig ? previousBestPossibleX : x;
     }
 
     private _getAmountOut(
@@ -312,10 +419,38 @@ export class UniBot {
         reserveIn: BN,
         reserveOut: BN
     ): BN {
-        let amountInWithFee = amountIn.times(997);
-        let numerator = amountInWithFee.times(reserveOut);
-        let denominator = reserveIn.times(1000).plus(amountInWithFee);
+        const amountInWithFee = amountIn.times(997);
+        const numerator = amountInWithFee.times(reserveOut);
+        const denominator = reserveIn.times(1000).plus(amountInWithFee);
         return numerator.div(denominator);
     }
 
+    ////////////////////////////////////////////////////////////////////////////////////////////////
+    //                                  GANACHE
+    /////////////////////////////////////////////////////////////////////////////////////////////////
+
+    private async _getGanacheBalance() {
+        return this.#simulationBoxBuilder.copy().build().getBalance();
+    }
+
+    private async _simulateTransactions(
+        transactions: Array<BuiltTransactionReadyToSend | RawTransaction>
+    ): Promise<SimulationBox | TransactionFailure> {
+
+        const simulationBoxBuilder = this.#simulationBoxBuilder.copy();
+
+        for (const tx of transactions) {
+            simulationBoxBuilder.addTx(tx);
+        }
+
+        const simulationBox = simulationBoxBuilder.build();
+
+        const voidOrFailure = await simulationBox.simulate();
+        if (typeof voidOrFailure === "object") {
+            return voidOrFailure;
+        }
+
+        return simulationBox;
+
+    }
 }

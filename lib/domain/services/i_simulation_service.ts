@@ -8,20 +8,20 @@ export interface ISimulationService {
     /**
      * Used to send (often replay usecases) transactions.
      * @param {RawTransaction} tx - The raw transaction that triggered the bot.
-     * @returns TransactionError if transaction failed.
+     * @throws TransactionError if transaction failed.
      */
     sendRawTransaction(
         tx: RawTransaction
-    ): Promise<void | TransactionFailure>;
+    ): Promise<void>;
 
     /**
      * Used to send built transactions.
      * @param {BuiltTransactionReadyToSend} tx - The transaction built and signed.
-     * @returns TransactionError if transaction failed.
+     * @throws TransactionError if transaction failed.
      */
     sendBuiltTransaction(
         tx: BuiltTransactionReadyToSend,
-    ): Promise<void | TransactionFailure>;
+    ): Promise<void>;
 
     getSimulationReserves(
         reserveIn: string,

@@ -27,7 +27,7 @@ export class TransactionListener {
         this.#logger.logGeneralInfo("Subscribed to pending tx");
         this.#sub
             .on("data", async (txHash: string) => {
-                const tx = await this.#txService.getTxFromHash(txHash);
+                const tx = await this.#txService.getTransactionFromHash(txHash);
                 if (tx == null) {
                     this.#logger.addErrorForTx(txHash, `Error while fetching the tx for ${txHash}`, 0);
                 } else {
@@ -46,5 +46,6 @@ export class TransactionListener {
             if (res) this.#logger.logGeneralInfo("Unsubscribed to pending tx");
         });
     }
+
 }
 

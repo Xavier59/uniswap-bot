@@ -5,7 +5,6 @@ import { TransactionPairReserves } from "../../domain/value_types/transaction_pa
 import { Contract } from "web3-eth-contract"
 import { BuiltTransactionReadyToSend } from "../../domain/value_types/built_transaction";
 import { TransactionFailure } from "../../domain/failures/transaction_failure";
-import { ILoggerService } from "../../domain/services/i_logger_service";
 
 export class SimulationService implements ISimulationService {
 
@@ -42,7 +41,7 @@ export class SimulationService implements ISimulationService {
 
     async sendRawTransaction(
         tx: RawTransaction
-    ): Promise<void> {
+    ) {
         try {
             await this.#web3Ganache.eth.sendSignedTransaction(tx);
         } catch (error) {
@@ -52,7 +51,7 @@ export class SimulationService implements ISimulationService {
 
     async sendBuiltTransaction(
         tx: BuiltTransactionReadyToSend,
-    ): Promise<void> {
+    ) {
         let params = {
             ...tx.sendParams,
             data: (tx.transaction as any).encodeABI(),

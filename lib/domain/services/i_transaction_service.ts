@@ -1,6 +1,9 @@
 import { Transaction } from "web3-eth"
 import BN from "bn.js";
 import { TransactionPairReserves } from "../value_types/transaction_pair_reserves";
+import { RawTransaction } from "../value_types/raw_transaction";
+import { TransactionFailure } from "../failures/transaction_failure";
+import { BuiltTransactionReadyToSend } from "../value_types/built_transaction";
 
 export interface ITransactionService {
 
@@ -19,6 +22,9 @@ export interface ITransactionService {
     // Return previously fetched nonce
     getCurrentNonce(): number;
 
+    // Return previously fetched nonce
+    fetchBlockNumber(): Promise<number>;
+
     // Return the associated reserve from the tokens pair addresses
     getReserve(
         reserveInAddr: string,
@@ -26,12 +32,32 @@ export interface ITransactionService {
     ): Promise<TransactionPairReserves>;
 
     // Return a tx from its hash
-    getTxFromHash(
+    getTransactionFromHash(
         txHash: string
     ): Promise<Transaction>;
 
     // Return a raw transaction from its hash
-    getRawTxFromHash(
+    getRawTransactionFromHash(
         txHash: string
     ): Promise<any>;
+
+    getBalance(): Promise<string>;
+
+    /**
+    * Used to send (often replay usecases) transactions.
+    * @param {RawTransaction} tx - The raw transaction that triggered the bot.
+    * @throws TransactionError if transaction failed.
+    */
+    sendRawTransaction(
+        tx: RawTransaction
+    ): Promise<void>;
+
+    /**
+     * Used to send built transactions.
+     * @param {BuiltTransactionReadyToSend} tx - The transaction built and signed.
+     * @throws TransactionError if transaction failed.
+     */
+    sendBuiltTransaction(
+        tx: BuiltTransactionReadyToSend,
+    ): Promise<void>;
 }

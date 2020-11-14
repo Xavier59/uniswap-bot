@@ -3,7 +3,9 @@ import Web3 from "web3";
 import { Transaction } from "web3-eth"
 import { Contract } from "web3-eth-contract"
 import { UNISWAP_FACTORY_ADDR } from "../../config";
+import { TransactionFailure } from "../../domain/failures/transaction_failure";
 import { ITransactionService } from "../../domain/services/i_transaction_service";
+import { BuiltTransactionReadyToSend } from "../../domain/value_types/built_transaction";
 import { RawTransaction } from "../../domain/value_types/raw_transaction";
 import { TransactionPairReserves } from "../../domain/value_types/transaction_pair_reserves";
 
@@ -14,29 +16,22 @@ export class TransactionService implements ITransactionService {
     #gasPrice: string;
 
     #currentNonce: number;
-    #walletAddr: string;
 
     constructor(
         web3: Web3,
         customContract: Contract,
-        walletAddr: string
     ) {
         this.#web3 = web3;
         this.#customContract = customContract;
 
         this.#gasPrice = "";
         this.#currentNonce = 1;
-        this.#walletAddr = walletAddr;
 
         // Maybe store for clearInterval ?
         setInterval(async () => {
             this.#gasPrice = await this._fetchGasPrice();
         }, 10000);
 
-    }
-
-    getCurrentNonce(): number {
-        return this.#currentNonce;
     }
 
     async init(): Promise<void> {
@@ -51,10 +46,51 @@ export class TransactionService implements ITransactionService {
         this.#currentNonce = await this._fetchNonce();
     }
 
+    async sendRawTransaction(
+        tx: RawTransaction
+    ): Promise<void> {
+        try {
+            await this.#web3.eth.sendSignedTransaction(tx);
+        } catch (error) {
+            throw new TransactionFailure("RAW_TX", error);
+        }
+    }
+
+    async sendBuiltTransaction(
+        tx: BuiltTransactionReadyToSend,
+    ): Promise<void> {
+        let params = {
+            ...tx.sendParams,
+            data: (tx.transaction as any).encodeABI(),
+        };
+
+        try {
+            let signedTransaction = await this.#web3.eth.accounts.signTransaction(
+                params,
+                process.env.ETH_PRIVATE_KEY!
+            );
+            await this.#web3.eth.sendSignedTransaction(signedTransaction.rawTransaction!);
+        } catch (error) {
+            throw new TransactionFailure((tx.transaction as any)._method.name, error);
+        }
+    }
+
+    getCurrentNonce(): number {
+        return this.#currentNonce;
+    }
+
     convertToEth(
         wei: string
     ): string {
         return this.#web3.utils.fromWei(wei);
+    }
+
+    async fetchBlockNumber(): Promise<number> {
+        return await this.#web3.eth.getBlockNumber();
+    }
+
+    async getBalance(): Promise<string> {
+        return await this.#web3.eth.getBalance(process.env.ETH_PUBLIC_KEY!);
     }
 
     private async _fetchGasPrice(): Promise<string> {
@@ -62,16 +98,16 @@ export class TransactionService implements ITransactionService {
     }
 
     private async _fetchNonce(): Promise<number> {
-        return await this.#web3.eth.getTransactionCount(this.#walletAddr) - 1;
+        return await this.#web3.eth.getTransactionCount(process.env.ETH_PUBLIC_KEY!) - 1;
     }
 
-    async getTxFromHash(
+    async getTransactionFromHash(
         txHash: string
     ): Promise<Transaction> {
         return await this.#web3.eth.getTransaction(txHash);
     }
 
-    async getRawTxFromHash(
+    async getRawTransactionFromHash(
         txHash: string
     ): Promise<RawTransaction> {
         return await this.#web3.eth["getRawTransaction"](txHash);

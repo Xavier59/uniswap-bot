@@ -68,7 +68,6 @@ async function main() {
     let txService = new TransactionService(
         web3MainNet,
         customMainNetContract,
-        process.env.ETH_PUBLIC_KEY!
     );
     await txService.init();
 
