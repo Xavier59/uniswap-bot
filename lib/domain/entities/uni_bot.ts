@@ -101,21 +101,15 @@ export class UniBot {
                     3
                 );
 
+                let nonce = this.#txService.getCurrentNonce();
                 const victimGasPrice = new BN(victimTx.gasPrice);
-                const transactions = this._buildTransactionsForSandwichAttack(
-                    victimGasPrice,
-                    path[0],
-                    path[1],
-                    maxInvestAmount.toFixed(0, 1),                                          // round down eth invested
-                    maxTokenToBuy.toFixed(0, 1),                                            // round down tokens to buy
-                    maxInvestAmount.toFixed(0, 1)                                           // round down eth to get back (as much as invested)
-                );
-
 
                 // Check if token has been approved yet
+                const transactions: Array<BuiltTransactionReadyToSend | RawTransaction> = []
                 const tokenIsApproved = await this.#tokenService.isApproved(tokenB);
                 if (tokenIsApproved === false) {
                     const approveTransaction = this._buildApproveTransaction(
+                        ++nonce,
                         victimGasPrice,
                         tokenB
                     );
@@ -124,8 +118,24 @@ export class UniBot {
                         `Approve transaction added before the attack`,
                         3
                     );
-                    transactions.unshift(approveTransaction);
+
+                    // Add the approve tx to the list of transaction for the attack
+                    transactions.push(approveTransaction);
                 }
+
+
+                const sandwitchAttackTxs = this._buildTransactionsForSandwichAttack(
+                    nonce,
+                    victimGasPrice,
+                    path[0],
+                    path[1],
+                    maxInvestAmount.toFixed(0, 1),                                          // round down eth invested
+                    maxTokenToBuy.toFixed(0, 1),                                            // round down tokens to buy
+                    maxInvestAmount.toFixed(0, 1)                                           // round down eth to get back (as much as invested)
+                );
+
+                // Add all the transaction required by the attack
+                transactions.push(...sandwitchAttackTxs);
 
 
                 // Simulate on ganache
@@ -140,6 +150,7 @@ export class UniBot {
                         `An attack is already processing, abandon`,
                         3
                     );
+                    return;
                 }
 
                 if (isWorth && this.#attackInProcess === false) {
@@ -228,11 +239,10 @@ export class UniBot {
     //                                  FRONT RUN
     /////////////////////////////////////////////////////////////////////////////////////////////////
     private _buildApproveTransaction(
+        currentNonce: number,
         victimGasPrice: BN,
         tokenB: string,
     ): BuiltTransactionReadyToSend {
-
-        const currentNonce = this.#txService.getCurrentNonce();
 
         // Approval transaction
         const approveTx: BuiltTransaction = this.#transactionfactory.createErc20Transaction(
@@ -250,13 +260,14 @@ export class UniBot {
                 from: process.env.ETH_PUBLIC_KEY!,
                 gas: 60000,
                 gasPrice: victimGasPrice.plus(10000001),
-                nonce: currentNonce + 1,
+                nonce: currentNonce,
                 to: tokenB,
             },
         };
     }
 
     private _buildTransactionsForSandwichAttack(
+        currentNonce: number,
         victimGasPrice: BN,
         tokenA: string,
         tokenB: string,
@@ -264,8 +275,6 @@ export class UniBot {
         amountTokenToBuy: string,
         amountOutMin: string,
     ): [BuiltTransactionReadyToSend, BuiltTransactionReadyToSend] {
-
-        const currentNonce = this.#txService.getCurrentNonce();
 
         const buyTx = this.#transactionfactory.createUniswapTransaction(
             TransactionType.onGanache,
@@ -298,7 +307,7 @@ export class UniBot {
                     gas: 250000,
                     gasPrice: victimGasPrice.plus(10000000),
                     value: amountToInvest,
-                    nonce: currentNonce + 2,
+                    nonce: currentNonce + 1,
                     to: UNISWAP_CONTRACT_ADDR,
                 }
             },
@@ -308,7 +317,7 @@ export class UniBot {
                     from: process.env.ETH_PUBLIC_KEY!,
                     gas: 250000,
                     gasPrice: victimGasPrice,
-                    nonce: currentNonce + 3,
+                    nonce: currentNonce + 2,
                     to: UNISWAP_CONTRACT_ADDR,
                 }
             }
