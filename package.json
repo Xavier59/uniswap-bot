@@ -11,6 +11,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@truffle/hdwallet-provider": "^1.2.0",
     "abi-decoder": "^2.3.0",
     "bn": "^1.0.5",
     "dotenv": "^8.2.0",

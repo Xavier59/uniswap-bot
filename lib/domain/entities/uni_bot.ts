@@ -46,7 +46,8 @@ export class UniBot {
         // Get the block number before all computation
         // used to make sur the block has not been mined
         // when we trigger the attack
-        const blockNumber = await this.#txService.fetchBlockNumber();
+        const blockNumber = this.#txService.getBlockNumber();
+        this.#loggerService.addInfoForTx(victimTx.hash, `Entering bot on block ${blockNumber}`, 2);
 
         this.#loggerService.addSuccessFortx(victimTx.hash, `Tx ${victimTx.hash} received by the bot`, 2);
 
@@ -107,6 +108,7 @@ export class UniBot {
                 // Check if token has been approved yet
                 const transactions: Array<BuiltTransactionReadyToSend | RawTransaction> = []
                 const tokenIsApproved = await this.#tokenService.isApproved(tokenB);
+
                 if (tokenIsApproved === false) {
                     const approveTransaction = this._buildApproveTransaction(
                         ++nonce,
@@ -123,7 +125,6 @@ export class UniBot {
                     transactions.push(approveTransaction);
                 }
 
-
                 const sandwitchAttackTxs = this._buildTransactionsForSandwichAttack(
                     nonce,
                     victimGasPrice,
@@ -137,10 +138,11 @@ export class UniBot {
                 // Add all the transaction required by the attack
                 transactions.push(...sandwitchAttackTxs);
 
-
                 // Simulate on ganache
                 const isWorth = await this._simulateSandwichAttackOnGanache(
-                    victimTx,
+                    victimTx.hash,
+                    !tokenIsApproved,
+                    rawVictimTx,
                     transactions
                 );
 
@@ -151,9 +153,7 @@ export class UniBot {
                         3
                     );
                     return;
-                }
-
-                if (isWorth && this.#attackInProcess === false) {
+                } else if (isWorth && this.#attackInProcess === false) {
                     this.#attackInProcess = true;
                     const voidOrTransactionFailure = await this.frontRun(
                         victimTx.hash,
@@ -169,8 +169,11 @@ export class UniBot {
                             await this.#tokenService.approveToken(tokenB);
                         }
 
+                        this.#loggerService.consumeLogsForTx(victimTx.hash);
+                        process.exit();
+
                     } else {
-                        // If we sent an approve tx, add the token to the approved list on database
+                        // if we sent an approve tx, add the token to the approved list on database
                         if (tokenIsApproved == false) {
                             await this.#tokenService.approveToken(tokenB);
                         }
@@ -198,14 +201,16 @@ export class UniBot {
         this.#loggerService.addInfoForTx(txHash, "Engaging frontRun process on main net", 5);
 
         // Check still same block
-        const curentBlockNumber = await this.#txService.fetchBlockNumber();
+        const curentBlockNumber = this.#txService.getBlockNumber();
+        this.#loggerService.addInfoForTx(txHash, `Trying on block ${curentBlockNumber}`, 5);
+
         if (startingBlockNumber != curentBlockNumber) {
             this.#loggerService.addErrorForTx(txHash, "Computation took too long, block number has changed", 5);
             return;
         }
 
         // Get initial balance
-        const balanceBefore = await this.#txService.getBalance();
+        const balanceBefore = await this.#txService.fetchBalance();
 
         // Send all txs without awaiting for each one
         const txs: Promise<void>[] = [];
@@ -222,13 +227,15 @@ export class UniBot {
             return txFailure;
         }
 
-        const balancAfter = await this.#txService.getBalance();
+        const balancAfter = await this.#txService.fetchBalance();
 
         const profit = new BN(balancAfter).minus(new BN(balanceBefore));
         if (profit.gt(0)) {
             this.#loggerService.addSuccessFortx(txHash, `Trade worth, won ${this.#txService.convertToEth(profit.toString())}`, 5);
         } else {
             this.#loggerService.addErrorForTx(txHash, `Trade NOT worth, lost ${this.#txService.convertToEth(profit.toString())}`, 5);
+            this.#loggerService.consumeLogsForTx(txHash);
+            process.exit();
         }
 
 
@@ -305,7 +312,7 @@ export class UniBot {
                 sendParams: {
                     from: process.env.ETH_PUBLIC_KEY!,
                     gas: 250000,
-                    gasPrice: victimGasPrice.plus(10000000),
+                    gasPrice: victimGasPrice.plus(victimGasPrice).toFixed(0, 1),
                     value: amountToInvest,
                     nonce: currentNonce + 1,
                     to: UNISWAP_CONTRACT_ADDR,
@@ -325,40 +332,65 @@ export class UniBot {
     }
 
     private async _simulateSandwichAttackOnGanache(
-        victimTx: Web3_Transaction,
+        txHash: string,
+        hasApprove: boolean,
+        victimTx: RawTransaction,
         transactions: Array<BuiltTransactionReadyToSend | RawTransaction>
 
     ): Promise<boolean> {
+
+        const ganacheTxs: Array<BuiltTransactionReadyToSend | RawTransaction> = []
+        if (hasApprove) {
+            ganacheTxs.push(transactions[0]);
+            ganacheTxs.push(transactions[1]);
+            ganacheTxs.push(victimTx);
+            ganacheTxs.push(transactions[2]);
+        } else {
+            ganacheTxs.push(transactions[0]);
+            ganacheTxs.push(victimTx);
+            ganacheTxs.push(transactions[1]);
+        }
+
         const previousBalance = await this._getGanacheBalance();
 
         const t1 = new Date().getTime();
-        const simualationBoxOrTransactionFailure = await this._simulateTransactions(transactions);
+        const simualationBoxOrTransactionFailure = await this._simulateTransactions(ganacheTxs);
 
         const t2 = new Date().getTime();
-        this.#loggerService.addInfoForTx(victimTx.hash, `Sandwich attack simulated in ${t2 - t1}ms`, 4);
+        this.#loggerService.addInfoForTx(txHash, `Sandwich attack simulated in ${t2 - t1}ms`, 4);
 
         // Handle any transaction errors
         if (simualationBoxOrTransactionFailure instanceof TransactionFailure) {
-            this.#loggerService.addErrorForTx(victimTx.hash, `Transaction failed: ${simualationBoxOrTransactionFailure.toString()}`, 4);
-            this.#loggerService.consumeLogsForTx(victimTx.hash);
+            this.#loggerService.addErrorForTx(txHash, `Transaction failed: ${simualationBoxOrTransactionFailure.toString()}`, 4);
+            this.#loggerService.consumeLogsForTx(txHash);
             return false;
         } else {
 
             // Check if profit has been made
             const newBalance = await simualationBoxOrTransactionFailure.getBalance();
-            this.#loggerService.addInfoForTx(victimTx.hash, `Balance before attack: ${previousBalance}`, 4);
-            this.#loggerService.addInfoForTx(victimTx.hash, `Balance after attack: ${newBalance}`, 4);
+            this.#loggerService.addInfoForTx(txHash, `Balance before attack: ${previousBalance}`, 4);
+            this.#loggerService.addInfoForTx(txHash, `Balance after attack: ${newBalance}`, 4);
             const wonAmount = new BN(newBalance).minus(new BN(previousBalance));
 
-            if (wonAmount.gt(0)) {
+            if (wonAmount.gt("0")) {
                 this.#loggerService.addSuccessFortx(
-                    victimTx.hash,
+                    txHash,
                     `Trade worth, won ${this.#txService.convertToEth(wonAmount.toString())}`,
                     4
                 );
+
+                const ethAmount = new BN(this.#txService.convertToEth(wonAmount.toString()));
+                if (ethAmount.lt("0.01")) {
+                    this.#loggerService.addErrorForTx(
+                        txHash,
+                        `Not enough profit made on simulation, abandon (${ethAmount} ETH)`,
+                        4
+                    );
+                    return false;
+                }
                 return true;
             } else {
-                this.#loggerService.addErrorForTx(victimTx.hash, `Trade not worth`, 4);
+                this.#loggerService.addErrorForTx(txHash, `Trade not worth on simulation, abandon`, 4);
                 return false;
             }
         }
@@ -422,7 +454,7 @@ export class UniBot {
         amountOutMin: BN
     ): BN {
 
-        let numIter = 10000;
+        let numIter = 5000;
         let up = reserveIn;
         let down = new BN("0");
         let x = up.div(2);

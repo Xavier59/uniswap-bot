@@ -12,9 +12,10 @@ export class TransactionService implements ITransactionService {
 
     #web3: Web3;
     #customContract: Contract;
-    #gasPrice: string;
 
+    #gasPrice: string;
     #currentNonce: number;
+    #blockNumber: number;
 
     constructor(
         web3: Web3,
@@ -24,17 +25,14 @@ export class TransactionService implements ITransactionService {
         this.#customContract = customContract;
 
         this.#gasPrice = "";
-        this.#currentNonce = 1;
+        this.#currentNonce = 0;
+        this.#blockNumber = 0;
 
         // Maybe store for clearInterval ?
         setInterval(async () => {
             this.#gasPrice = await this._fetchGasPrice();
         }, 10000);
 
-    }
-
-    async updateNonce(): Promise<void> {
-        this.#currentNonce = await this._fetchNonce();
     }
 
     async init(): Promise<void> {
@@ -47,6 +45,7 @@ export class TransactionService implements ITransactionService {
         });
         this.#gasPrice = await this._fetchGasPrice();
         this.#currentNonce = await this._fetchNonce();
+        this.#blockNumber = await this._fetchBlockNumber();
     }
 
     async sendRawTransaction(
@@ -82,17 +81,25 @@ export class TransactionService implements ITransactionService {
         return this.#currentNonce;
     }
 
+    getBlockNumber(): number {
+        return this.#blockNumber;
+    }
+
+    setBlockNumber(blockNumber: number): void {
+        this.#blockNumber = blockNumber;
+    }
+
     convertToEth(
         wei: string
     ): string {
         return this.#web3.utils.fromWei(wei);
     }
 
-    async fetchBlockNumber(): Promise<number> {
+    private async _fetchBlockNumber(): Promise<number> {
         return await this.#web3.eth.getBlockNumber();
     }
 
-    async getBalance(): Promise<string> {
+    async fetchBalance(): Promise<string> {
         return await this.#web3.eth.getBalance(process.env.ETH_PUBLIC_KEY!);
     }
 
@@ -129,6 +136,10 @@ export class TransactionService implements ITransactionService {
 
     getGasPrice(): string {
         return this.#gasPrice;
+    }
+
+    async updateNonce(): Promise<void> {
+        this.#currentNonce = await this._fetchNonce();
     }
 
 }

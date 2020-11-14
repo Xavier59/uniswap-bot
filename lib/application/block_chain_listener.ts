@@ -3,12 +3,14 @@ import { Subscription } from "web3-core-subscriptions";
 import { ILoggerService } from "../domain/services/i_logger_service";
 import { ITransactionService } from "../domain/services/i_transaction_service";
 import { ITransactionMiddleware } from "./middlewares/i_transaction_middleware";
+import { BlockHeader } from "web3-eth";
 
-export class TransactionListener {
+export class BlockChainListener {
 
     #txService: ITransactionService;
     #txMiddlewareBus: ITransactionMiddleware;
-    #sub: Subscription<string>;
+    #pendingTransactions: Subscription<string>;
+    #newBlocks: Subscription<BlockHeader>;
     #logger: ILoggerService;
 
     constructor(
@@ -18,14 +20,14 @@ export class TransactionListener {
         logger: ILoggerService
     ) {
         this.#txMiddlewareBus = txMiddlewareBus;
-        this.#sub = web3.eth.subscribe("pendingTransactions");
         this.#txService = txService;
         this.#logger = logger;
+        this.#pendingTransactions = web3.eth.subscribe("pendingTransactions");
+        this.#newBlocks = web3.eth.subscribe("newBlockHeaders");
     }
 
     startListening(): void {
-        this.#logger.logGeneralInfo("Subscribed to pending tx");
-        this.#sub
+        this.#pendingTransactions
             .on("data", async (txHash: string) => {
                 const tx = await this.#txService.getTransactionFromHash(txHash);
                 if (tx == null) {
@@ -37,15 +39,23 @@ export class TransactionListener {
                 }
             })
             .on("error", (err: Object) => {
-                this.#logger.logGeneralInfo(`Error in tx subscription listener : ${err}`);
+                this.#logger.logGeneralInfo(`Error in pending transactions subscription listener : ${err}`);
+            });
+        this.#logger.logGeneralInfo("Subscribed to pending tx");
+
+        this.#newBlocks
+            .on("data", async (blockHead) => {
+                this.#txService.setBlockNumber(blockHead.number);
             })
+            .on("error", (err: Object) => {
+                this.#logger.logGeneralInfo(`Error in new block subscription listener : ${err}`);
+            });
+        this.#logger.logGeneralInfo("Subscribed to new blocks");
     }
 
     stopListening(): void {
-        this.#sub.unsubscribe((err, res) => {
+        this.#pendingTransactions.unsubscribe((err, res) => {
             if (res) this.#logger.logGeneralInfo("Unsubscribed to pending tx");
         });
     }
-
 }
-

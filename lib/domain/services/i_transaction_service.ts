@@ -25,8 +25,11 @@ export interface ITransactionService {
     // Return previously fetched nonce
     updateNonce(): Promise<void>;
 
-    // Return previously fetched nonce
-    fetchBlockNumber(): Promise<number>;
+    // Return the current block numbr
+    getBlockNumber(): number;
+
+    // Return the current block numbr
+    setBlockNumber(blockNumber: number): void;
 
     // Return the associated reserve from the tokens pair addresses
     getReserve(
@@ -44,7 +47,7 @@ export interface ITransactionService {
         txHash: string
     ): Promise<any>;
 
-    getBalance(): Promise<string>;
+    fetchBalance(): Promise<string>;
 
     /**
     * Used to send (often replay usecases) transactions.

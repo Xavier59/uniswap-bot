@@ -6,7 +6,6 @@ import abiDecoder from "abi-decoder";
 import dotenv from "dotenv";
 dotenv.config();
 
-import { TransactionListener } from "./application/transaction_listener";
 import { TransactionService } from "./infrastructure/services/transaction_service";
 import { UniBot } from "./domain/entities/uni_bot"
 import { ConsoleLogger } from "./infrastructure/services/console_logger";
@@ -23,6 +22,7 @@ import { CUSTOM_CONTRACT_ADDR, LOGGER_OPTIONS, PRIVATE_NODE } from "./config";
 import Database from "./infrastructure/services/database";
 import { TokenService } from "./infrastructure/services/token_service";
 import { FilterBlockListedTokensMiddleware } from "./application/middlewares/filter_blocklisted_tokens_middleware";
+import { BlockChainListener } from "./application/block_chain_listener";
 
 
 const uniswapABI = JSON.parse(readFileSync("./abi/UniswapV2Router02.abi.json").toString());
@@ -100,7 +100,7 @@ async function main() {
         .build();
 
     // Create a listener to notify the bot about incoming tx
-    const txListener = new TransactionListener(
+    const txListener = new BlockChainListener(
         web3MainNet,
         txMiddlewareBus,
         txService,
