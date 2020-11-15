@@ -141,7 +141,7 @@
         "type": "uint256"
       }
     ],
-    "name": "swapExactETHForTokens",
+    "name": "swapETHForExactTokens",
     "outputs": [
       {
         "internalType": "uint256[]",

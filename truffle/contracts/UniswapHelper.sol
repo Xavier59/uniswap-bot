@@ -183,7 +183,7 @@ contract UniswapHelper {
         ensure(blocknumber)
         returns (uint256[] memory amounts)
     {
-        (bool success, bytes memory result) = _uniswap.call{value: msg.value}(
+        (bool success, bytes memory result) = _uniswap.delegatecall(
             abi.encodeWithSignature(
                 "swapETHForExactTokens(uint256,address[],address,uint256)",
                 amountOut,

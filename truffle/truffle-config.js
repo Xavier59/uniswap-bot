@@ -42,11 +42,11 @@ module.exports = {
     // tab if you use this network and you must also set the `host`, `port` and `network_id`
     // options below to some value.
     //
-    /*development: {
+    development: {
       host: "127.0.0.1",     // Localhost (default: none)
       port: 8545,            // Standard Ethereum port (default: none)
       network_id: "*",       // Any network (default: none)
-    },*/
+    },
     // Another network with more advanced options...
     // advanced: {
     // port: 8777,             // Custom port
@@ -59,8 +59,8 @@ module.exports = {
     // Useful for deploying to a public network.
     // NB: It's important to wrap the provider as a function.
 
-    mnemonic: {
-      provider: () => new HDWalletProvider("pig alien snap myth impulse food busy pottery zoo eye fuel wise", `http://127.0.0.1:8545/`),
+    mainnet: {
+      provider: () => new HDWalletProvider("", `http://127.0.0.1:8545/`),
       network_id: '*',
       gas: 6500000,
       gasPrice: 16000000000,
