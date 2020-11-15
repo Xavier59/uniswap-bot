@@ -304,7 +304,7 @@ export class UniBot {
                 amountOutMin,                                               // amountOutMin
                 [tokenB, tokenA],                                           // Pairs
                 process.env.ETH_PUBLIC_KEY,                                 // Wallet
-                nextBlockNumber                                             // Block number required for our custom contract
+                Math.floor(new Date().getTime() / 1000) + 86400        // max timestamp for sell tx
             ]
         );
 

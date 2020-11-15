@@ -171,8 +171,8 @@ contract UniswapHelper {
 
     function executeArb(address[] calldata path) public onlyOwner {}*/
 
-    function swapExactETHForTokens(
-        uint256 amountOutMin,
+    function swapETHForExactTokens(
+        uint256 amountOut,
         address[] calldata path,
         address to,
         uint256 blocknumber
@@ -185,11 +185,11 @@ contract UniswapHelper {
     {
         (bool success, bytes memory result) = _uniswap.call{value: msg.value}(
             abi.encodeWithSignature(
-                "swapExactETHForTokens(uint256,address[],address,uint256)",
-                amountOutMin,
+                "swapETHForExactTokens(uint256,address[],address,uint256)",
+                amountOut,
                 path,
                 to,
-                block.timestamp + 180
+                block.timestamp+180
             )
         );
 

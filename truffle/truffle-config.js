@@ -60,7 +60,7 @@ module.exports = {
     // NB: It's important to wrap the provider as a function.
 
     mnemonic: {
-      provider: () => new HDWalletProvider("", `http://127.0.0.1:8545/`),
+      provider: () => new HDWalletProvider("pig alien snap myth impulse food busy pottery zoo eye fuel wise", `http://127.0.0.1:8545/`),
       network_id: '*',
       gas: 6500000,
       gasPrice: 16000000000,
