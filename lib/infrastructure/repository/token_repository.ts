@@ -20,7 +20,7 @@ export default class TokenRepository {
         item: string,
         data: {}
     ): Promise<void> {
-        this.#collection.updateOne(
+        await this.#collection.updateOne(
             { "address": item.toLowerCase() },
             { $set: data }
         );

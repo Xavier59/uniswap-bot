@@ -156,32 +156,32 @@ export class UniBot {
                     return;
                 } else if (isWorth && this.#attackInProcess === false) {
                     this.#attackInProcess = true;
-                    const voidOrTransactionFailure = await this.frontRun(
-                        victimTx.hash,
-                        blockNumber,
-                        transactions
-                    );
+                    // const voidOrTransactionFailure = await this.frontRun(
+                    //     victimTx.hash,
+                    //     blockNumber,
+                    //     transactions
+                    // );
 
-                    if (voidOrTransactionFailure instanceof TransactionFailure) {
-                        this.#loggerService.addErrorForTx(victimTx.hash, `Transaction failed on mainnet: ${voidOrTransactionFailure.toString()}`, 4);
+                    // if (voidOrTransactionFailure instanceof TransactionFailure) {
+                    //     this.#loggerService.addErrorForTx(victimTx.hash, `Transaction failed on mainnet: ${voidOrTransactionFailure.toString()}`, 4);
 
-                        // if the approval transaction did not fail we need to update the db as well
-                        if (voidOrTransactionFailure.getMethod() !== "approve") {
-                            await this.#tokenService.approveToken(tokenB);
-                        }
+                    //     // if the approval transaction did not fail we need to update the db as well
+                    //     if (voidOrTransactionFailure.getMethod() !== "approve") {
+                    //         await this.#tokenService.approveToken(tokenB);
+                    //     }
 
-                        this.#loggerService.consumeLogsForTx(victimTx.hash);
-                        process.exit();
+                    //     this.#loggerService.consumeLogsForTx(victimTx.hash);
+                    //     process.exit();
 
-                    } else {
-                        // if we sent an approve tx, add the token to the approved list on database
-                        if (tokenIsApproved == false) {
-                            await this.#tokenService.approveToken(tokenB);
-                        }
-                    }
+                    // } else {
+                    //     // if we sent an approve tx, add the token to the approved list on database
+                    //     if (tokenIsApproved == false) {
+                    //         await this.#tokenService.approveToken(tokenB);
+                    //     }
+                    // }
 
-                    // In all cases, update nonce
-                    await this.#txService.updateNonce();
+                    // // In all cases, update nonce
+                    // await this.#txService.updateNonce();
 
                     // Free the "lock" lol
                     this.#attackInProcess = false;
@@ -463,6 +463,28 @@ export class UniBot {
         let previousBestPossibleX = new BN("0");
         let amountOut = new BN("0");
 
+        // Test with reserveIn as x
+        amountOut = this._getAmountOut(
+            amountIn,
+            reserveIn.plus(reserveIn),
+            reserveOut.minus(this._getAmountOut(
+                reserveIn,
+                reserveIn,
+                reserveOut,
+            ))
+        );
+
+        // Skipp calculation if x = reserveIn => amoutOut <= amoutOutMin
+        if (amountOut.lte(amountOutMin)) {
+            this.#loggerService.addInfoForTx(
+                txHash,
+                `x could be equal to reserveIn, leaving dichotomie`,
+                4
+            );
+            return reserveIn;
+        }
+
+        // Else process dichotomie to find best x
         while (numIter > 0) {
 
             amountOut = this._getAmountOut(
