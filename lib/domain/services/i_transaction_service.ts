@@ -7,14 +7,14 @@ import { BuiltTransactionReadyToSend } from "../value_types/built_transaction";
 
 export interface ITransactionService {
 
-    // Initialize the object before use
-    // Mainly initiate gasPrice, nonce, blockNumber
-    init(): Promise<void>;
-
     // Convert wei to ETH
     convertToEth(
         wei: string
     ): string;
+
+    // Initialize the object before use
+    // Mainly initiate gasPrice
+    init(): Promise<void>;
 
     // Return previously fetched gas price
     getGasPrice(): string;

@@ -7,7 +7,7 @@ import { TransactionPairReserves } from "../value_types/transaction_pair_reserve
 import BN from "bignumber.js";
 import { ISimulationBoxBuilder } from "../factories/i_simulation_box_builder";
 import { ERC20Methods, ITransactionFactory, TransactionType, UniswapMethods } from "../factories/i_transaction_factory";
-import { CUSTOM_CONTRACT_ADDR, MAX_ETH_INVEST, UNISWAP_CONTRACT_ADDR } from "../../config";
+import { MAX_ETH_INVEST, UNISWAP_CONTRACT_ADDR } from "../../config";
 import { BuiltTransaction, BuiltTransactionReadyToSend } from "../value_types/built_transaction";
 import { TransactionFailure } from "../failures/transaction_failure";
 import { SimulationBox } from "./simulation_box";
@@ -292,7 +292,7 @@ export class UniBot {
                 amountTokenToBuy,                                           // amoutTokenOut
                 [tokenA, tokenB],                                           // Pair
                 process.env.ETH_PUBLIC_KEY,                                 // Wallet
-                nextBlockNumber                                             // Block number required for our custom contract
+                Math.floor(new Date().getTime() / 1000) + 180                                             // Block number required for our custom contract
             ]
         );
 
@@ -317,7 +317,7 @@ export class UniBot {
                     gasPrice: victimGasPrice.plus(victimGasPrice).toFixed(0, 1),
                     value: amountToInvest,
                     nonce: currentNonce + 1,
-                    to: CUSTOM_CONTRACT_ADDR,
+                    to: UNISWAP_CONTRACT_ADDR,
                 }
             },
             {
