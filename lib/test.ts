@@ -1,17 +1,18 @@
-import BN from "bn.js";
+// var levelup = require('levelup')
+// var leveldown = require('leveldown')
 
-const a = new BN("2100000000000000000");
-const b = new BN("162923009680994904099");
-const c = new BN("1356577690946024101455");
-const d = new BN("16392375784098613208");
+// // 1) Create our database
+// var db = levelup(leveldown('./mydb'))
 
-const x = new BN("4.0552060014524744e+18");
+// // 2) put a key & value
+// db.put('name', 'LevelUP', function (err) {
+//     if (err) return console.log('Ooops!', err) // some kind of I/O error
 
-const nom = a.muln(997).mul(c.sub(x.mul(c.muln(997)).div(b.muln(1000).add(x.muln(997)))));
-const denom = b.add(x).muln(1000).add(a.muln(997));
+//     // 3) fetch by key
+//     db.get('name', function (err, value) {
+//         if (err) return console.log('Ooops!', err) // likely the key was not found
 
-const res = nom.div(denom);
-
-console.log(`Calculated=   ${res.toString()}`);
-console.log(`amountOutMin= ${d.toString()}`);
-console.log(`Difference=   ${d.sub(res).toString()}`);
+//         // ta da!
+//         console.log('name=' + value)
+//     })
+// })

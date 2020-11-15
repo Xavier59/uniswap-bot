@@ -73,7 +73,7 @@ export class UniBot {
             this.#loggerService.addInfoForTx(victimTx.hash, `Reserve impact: ${reserveImpact}%`, 2);
 
             // Make sure the impact is sufficient enough to overflow fees
-            // when reserve decreases price increases
+            // (when reserve decreases price increases)
             if (reserveImpact > -1) {
                 this.#loggerService.addErrorForTx(victimTx.hash, `Impact too low not worth to trade.`, 3);
             } else {
@@ -156,32 +156,32 @@ export class UniBot {
                     return;
                 } else if (isWorth && this.#attackInProcess === false) {
                     this.#attackInProcess = true;
-                    const voidOrTransactionFailure = await this.frontRun(
-                        victimTx.hash,
-                        blockNumber,
-                        transactions
-                    );
+                    // const voidOrTransactionFailure = await this.frontRun(
+                    //     victimTx.hash,
+                    //     blockNumber,
+                    //     transactions
+                    // );
 
-                    if (voidOrTransactionFailure instanceof TransactionFailure) {
-                        this.#loggerService.addErrorForTx(victimTx.hash, `Transaction failed on mainnet: ${voidOrTransactionFailure.toString()}`, 4);
+                    // if (voidOrTransactionFailure instanceof TransactionFailure) {
+                    //     this.#loggerService.addErrorForTx(victimTx.hash, `Transaction failed on mainnet: ${voidOrTransactionFailure.toString()}`, 4);
 
-                        // if the approval transaction did not fail we need to update the db as well
-                        if (voidOrTransactionFailure.getMethod() !== "approve") {
-                            await this.#tokenService.approveToken(tokenB);
-                        }
+                    //     // if the approval transaction did not fail we need to update the db as well
+                    //     if (voidOrTransactionFailure.getMethod() !== "approve") {
+                    //         await this.#tokenService.approveToken(tokenB);
+                    //     }
 
-                        this.#loggerService.consumeLogsForTx(victimTx.hash);
-                        process.exit();
+                    //     this.#loggerService.consumeLogsForTx(victimTx.hash);
+                    //     process.exit();
 
-                    } else {
-                        // if we sent an approve tx, add the token to the approved list on database
-                        if (tokenIsApproved == false) {
-                            await this.#tokenService.approveToken(tokenB);
-                        }
-                    }
+                    // } else {
+                    //     // if we sent an approve tx, add the token to the approved list on database
+                    //     if (tokenIsApproved == false) {
+                    //         await this.#tokenService.approveToken(tokenB);
+                    //     }
+                    // }
 
-                    // In all cases, update nonce
-                    await this.#txService.updateNonce();
+                    // // In all cases, update nonce
+                    // await this.#txService.updateNonce();
 
                     // Free the "lock" lol
                     this.#attackInProcess = false;
@@ -292,7 +292,7 @@ export class UniBot {
                 amountTokenToBuy,                                           // amoutTokenOut
                 [tokenA, tokenB],                                           // Pair
                 process.env.ETH_PUBLIC_KEY,                                 // Wallet
-                nextBlockNumber                                             // Block number required for our custom contract
+                Math.floor(new Date().getTime() / 1000) + 180                                             // Block number required for our custom contract
             ]
         );
 
@@ -341,7 +341,7 @@ export class UniBot {
 
     ): Promise<boolean> {
 
-        const ganacheTxs: Array<BuiltTransactionReadyToSend | RawTransaction> = [...transactions]
+        const ganacheTxs: Array<BuiltTransactionReadyToSend | RawTransaction> = [...transactions];
 
         // If the txs contains the approve tx
         // insert the victim tx to the appropriate index
@@ -463,6 +463,28 @@ export class UniBot {
         let previousBestPossibleX = new BN("0");
         let amountOut = new BN("0");
 
+        // Test with reserveIn as x
+        amountOut = this._getAmountOut(
+            amountIn,
+            reserveIn.plus(reserveIn),
+            reserveOut.minus(this._getAmountOut(
+                reserveIn,
+                reserveIn,
+                reserveOut,
+            ))
+        );
+
+        // Skipp calculation if x = reserveIn => amoutOut <= amoutOutMin
+        if (amountOut.gte(amountOutMin)) {
+            this.#loggerService.addInfoForTx(
+                txHash,
+                `x could be equal to reserveIn, leaving dichotomie`,
+                4
+            );
+            return reserveIn;
+        }
+
+        // Else process dichotomie to find best x
         while (numIter > 0) {
 
             amountOut = this._getAmountOut(
@@ -535,7 +557,7 @@ export class UniBot {
         const simulationBox = simulationBoxBuilder.build();
 
         const voidOrFailure = await simulationBox.simulate();
-        if (typeof voidOrFailure === "object") {
+        if (voidOrFailure instanceof TransactionFailure) {
             return voidOrFailure;
         }
 

@@ -9,7 +9,7 @@ export default class Database {
         this.#db = db;
     }
 
-    public static async connectDatabase(databaseUrl, dbname): Promise<Database> {
+    public static async connectDatabase(databaseUrl: string, dbname: string): Promise<Database> {
         if (this._db == null) {
             try {
                 const connection = await MongoClient.connect(`${databaseUrl}/?authSource=${dbname}`, { useUnifiedTopology: true, connectTimeoutMS: 5000, serverSelectionTimeoutMS: 5000 });
