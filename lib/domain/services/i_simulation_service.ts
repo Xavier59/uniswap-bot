@@ -5,23 +5,34 @@ import { TransactionPairReserves } from "../value_types/transaction_pair_reserve
 
 export interface ISimulationService {
 
+    // Initialize the object before use
+    // Used to add methods to web3Ganache
+    init(): void;
+
     /**
-     * Used to send (often replay usecases) transactions.
+     * Used to push (often replay usecases) raw transactions to ganache tx pool.
      * @param {RawTransaction} tx - The raw transaction that triggered the bot.
      * @throws TransactionError if transaction failed.
      */
-    sendRawTransaction(
+    addRawTransactionToPool(
         tx: RawTransaction
-    ): Promise<void>;
+    ): Promise<string>;
 
     /**
-     * Used to send built transactions.
+     * Used to push built transactions to ganache tx pool.
      * @param {BuiltTransactionReadyToSend} tx - The transaction built and signed.
      * @throws TransactionError if transaction failed.
      */
-    sendBuiltTransaction(
+    addBuiltTransactionToPool(
         tx: BuiltTransactionReadyToSend,
-    ): Promise<void>;
+    ): Promise<string>;
+
+    /**
+     * Force ganache to mine block in tx pool .
+     * @param {BuiltTransactionReadyToSend} tx - The transaction built and signed.
+     * @throws TransactionError if transaction failed.
+     */
+    forceBlockToBeMined(): Promise<void>;
 
     getSimulationReserves(
         reserveIn: string,

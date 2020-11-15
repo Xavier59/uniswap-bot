@@ -19,17 +19,23 @@ export class SimulationBox {
 
     async simulate(): Promise<void | TransactionFailure> {
 
+        const sentTxs: Array<Promise<string>> = [];
+
         for (let i = 0; i < this.#transactions.length; i++) {
             try {
                 if (typeof this.#transactions[i] === "string") {
-                    await this.#simulationService.sendRawTransaction(this.#transactions[i] as string);
+                    sentTxs.push(this.#simulationService.addRawTransactionToPool(this.#transactions[i] as string));
                 } else {
-                    await this.#simulationService.sendBuiltTransaction(this.#transactions[i] as BuiltTransactionReadyToSend);
+                    sentTxs.push(this.#simulationService.addBuiltTransactionToPool(this.#transactions[i] as BuiltTransactionReadyToSend));
                 }
+
+                await this.#simulationService.forceBlockToBeMined();
+
             } catch (txFailure) {
                 return txFailure;
             }
         }
+
     }
 
     async getSimulationReserves(

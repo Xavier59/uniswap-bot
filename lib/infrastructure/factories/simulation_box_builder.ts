@@ -37,6 +37,7 @@ export class SimulationBoxBuilder implements ISimulationBoxBuilder {
         const web3Ganache = new Web3(ganache.provider(GANACHE_OPTIONS) as any);
         const customContract = new web3Ganache.eth.Contract(this.#customUniswapABI as any, CUSTOM_CONTRACT_ADDR);
         const simulationService = new SimulationService(web3Ganache, UNISWAP_FACTORY_ADDR, customContract);
+        simulationService.init();
         return new SimulationBox(this.#txList, simulationService);
     }
 

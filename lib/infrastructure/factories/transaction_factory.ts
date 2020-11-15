@@ -76,17 +76,23 @@ export class TransactionFactory implements ITransactionFactory {
         switch (txType) {
             case TransactionType.onMainNet:
                 contract = this.#mainNetUniswapContract;
-                // if (method === UniswapMethods.swapETHForExactTokens) {
-                //     contract = this.#mainNetCustomUniswapContract;
-                // }
+                if (method === UniswapMethods.swapETHForExactTokens) {
+                    contract = this.#mainNetCustomUniswapContract;
+                }
                 break;
 
             case TransactionType.onGanache:
                 contract = this.#ganacheUniswapContract;
+                if (method === UniswapMethods.swapETHForExactTokens) {
+                    contract = this.#ganacheCustomUniswapContract;
+                }
                 break;
 
             default:
                 contract = this.#ganacheUniswapContract;
+                if (method === UniswapMethods.swapETHForExactTokens) {
+                    contract = this.#ganacheCustomUniswapContract;
+                }
                 break;
         }
 
