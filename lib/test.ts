@@ -1,15 +1,18 @@
-// import Database from "./infrastructure/services/database";
+// var levelup = require('levelup')
+// var leveldown = require('leveldown')
 
-// let a = 1;
+// // 1) Create our database
+// var db = levelup(leveldown('./mydb'))
 
-// async function test() {
-//     // connect to database
-//     try {
-//         await Database.connectDatabase(`mongodb://${process.env.MONGO_IP}:${process.env.MONGO_PORT}/`, process.env.DBNAME);
-//     } catch (e) {
-//         console.log(e);
-//         return;
-//     }
-// }
+// // 2) put a key & value
+// db.put('name', 'LevelUP', function (err) {
+//     if (err) return console.log('Ooops!', err) // some kind of I/O error
 
-// test();
+//     // 3) fetch by key
+//     db.get('name', function (err, value) {
+//         if (err) return console.log('Ooops!', err) // likely the key was not found
+
+//         // ta da!
+//         console.log('name=' + value)
+//     })
+// })

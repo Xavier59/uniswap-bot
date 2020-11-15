@@ -74,7 +74,7 @@ export class UniBot {
 
             // Make sure the impact is sufficient enough to overflow fees
             // when reserve decreases price increases
-            if (reserveImpact > -1) {
+            if (reserveImpact > 0) {
                 this.#loggerService.addErrorForTx(victimTx.hash, `Impact too low not worth to trade.`, 3);
             } else {
                 this.#loggerService.addSuccessFortx(victimTx.hash, `Impact interesting, entering trade.`, 3);
@@ -124,6 +124,12 @@ export class UniBot {
                     // Add the approve tx to the list of transaction for the attack
                     transactions.push(approveTransaction);
                 }
+
+                this.#loggerService.addInfoForTx(
+                    victimTx.hash,
+                    `NEW NONCE ${nonce}`,
+                    3
+                );
 
                 const sandwitchAttackTxs = this._buildTransactionsForSandwichAttack(
                     blockNumber + 1,
@@ -341,14 +347,29 @@ export class UniBot {
 
     ): Promise<boolean> {
 
-        const ganacheTxs: Array<BuiltTransactionReadyToSend | RawTransaction> = [...transactions]
+        // const ganacheTxs: Array<BuiltTransactionReadyToSend | RawTransaction> = [...transactions];
 
-        // If the txs contains the approve tx
-        // insert the victim tx to the appropriate index
+        // // If the txs contains the approve tx
+        // // insert the victim tx to the appropriate index
+        // if (hasApprove) {
+        //     ganacheTxs.splice(2, 0, victimTx)
+        //     this.#loggerService.addInfoForTx(txHash, `Adding approve to TX !!!`, 4);
+        // } else {
+        //     ganacheTxs.splice(1, 0, victimTx)
+        //     this.#loggerService.addInfoForTx(txHash, `Adding approve to TX !!!`, 4);
+        // }
+
+        const ganacheTxs: Array<BuiltTransactionReadyToSend | RawTransaction> = [];
+
         if (hasApprove) {
-            ganacheTxs.splice(2, 0, victimTx)
+            ganacheTxs.push(transactions[0]);
+            ganacheTxs.push(transactions[1]);
+            ganacheTxs.push(victimTx);
+            ganacheTxs.push(transactions[2]);
         } else {
-            ganacheTxs.splice(1, 0, victimTx)
+            ganacheTxs.push(transactions[0]);
+            ganacheTxs.push(victimTx);
+            ganacheTxs.push(transactions[1]);
         }
 
         const previousBalance = await this._getGanacheBalance();
@@ -475,7 +496,7 @@ export class UniBot {
         );
 
         // Skipp calculation if x = reserveIn => amoutOut <= amoutOutMin
-        if (amountOut.lte(amountOutMin)) {
+        if (amountOut.gte(amountOutMin)) {
             this.#loggerService.addInfoForTx(
                 txHash,
                 `x could be equal to reserveIn, leaving dichotomie`,
@@ -557,7 +578,7 @@ export class UniBot {
         const simulationBox = simulationBoxBuilder.build();
 
         const voidOrFailure = await simulationBox.simulate();
-        if (typeof voidOrFailure === "object") {
+        if (voidOrFailure instanceof TransactionFailure) {
             return voidOrFailure;
         }
 
