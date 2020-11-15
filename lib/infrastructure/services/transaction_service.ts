@@ -47,8 +47,6 @@ export class TransactionService implements ITransactionService {
         this.#gasPrice = await this._fetchGasPrice();
         this.#currentNonce = await this._fetchNonce();
         this.#blockNumber = await this._fetchBlockNumber();
-
-        console.log("INITIAL NONCE : " + this.#currentNonce);
     }
 
     async sendRawTransaction(

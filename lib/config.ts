@@ -1,5 +1,4 @@
 import BN from "bignumber.js";
-
 export const PRIVATE_NODE = `ws://${process.env.NODE_IP}:${process.env.NODE_PORT}`;
 export const UNISWAP_FACTORY_ADDR = "0x5c69bee701ef814a2b6a3edd4b1652cb9cc5aa6f"
 export const UNISWAP_CONTRACT_ADDR: string = "0x7a250d5630b4cf539739df2c5dacb4c659f2488d";
