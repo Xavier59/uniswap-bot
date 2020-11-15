@@ -46,7 +46,7 @@ async function main() {
 
     // connect to database
     try {
-        await Database.connectDatabase(`mongodb://${process.env.MONGO_IP}:${process.env.MONGO_PORT}/`, process.env.DBNAME);
+        await Database.connectDatabase(`mongodb://${process.env.DBUSER}:${process.env.DBPASSWD}@${process.env.MONGO_IP}:${process.env.MONGO_PORT}/`, process.env.DBNAME!);
     } catch (e) {
         logger.logGeneralInfo(`Couldn't connect to database, got error : ${e}`);
         return;
