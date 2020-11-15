@@ -14,8 +14,6 @@ export class SimulationService implements ISimulationService {
     #customContract: Contract;
     #uniswapFactoryAddr: string;
 
-    #txErrosWhenMinedBlock: Array<TransactionFailure>;
-
     constructor(
         web3Ganache: Web3,
         uniswapFactoryAddr: string,
@@ -24,16 +22,6 @@ export class SimulationService implements ISimulationService {
         this.#web3Ganache = web3Ganache;
         this.#uniswapFactoryAddr = uniswapFactoryAddr;
         this.#customContract = customContract;
-        this.#txErrosWhenMinedBlock = [];
-    }
-
-    init(): void {
-        this.#web3Ganache.eth.extend({
-            methods: [{
-                name: "mine",
-                call: "evm_mine",
-            }]
-        });
     }
 
     async getSimulationReserves(
@@ -47,39 +35,23 @@ export class SimulationService implements ISimulationService {
         ).call();
     }
 
-    async forceBlockToBeMined(): Promise<void> {
-        await this.#web3Ganache.eth["mine"]();
-
-        if (this.#txErrosWhenMinedBlock.length > 0) {
-            throw this.#txErrosWhenMinedBlock[0];
-        }
-    }
-
     async getSimulationBalance(): Promise<string> {
         return await this.#web3Ganache.eth.getBalance(process.env.ETH_PUBLIC_KEY!);
     }
 
-    async addRawTransactionToPool(
+    async sendRawTransaction(
         tx: RawTransaction
-    ): Promise<string> {
-
-        return new Promise(async (resolve, reject) => {
-            try {
-                await this.#web3Ganache.eth.sendSignedTransaction(tx)
-                    .on("transactionHash", (hash) => {
-                        resolve(hash);
-                    })
-            } catch (error) {
-                const txFailure = new TransactionFailure("RAW_TX", error);
-                this.#txErrosWhenMinedBlock.push(txFailure);
-            }
-        });
+    ) {
+        try {
+            await this.#web3Ganache.eth.sendSignedTransaction(tx);
+        } catch (error) {
+            throw new TransactionFailure("RAW_TX", error);
+        }
     }
 
-    async addBuiltTransactionToPool(
+    async sendBuiltTransaction(
         tx: BuiltTransactionReadyToSend,
-    ): Promise<string> {
-
+    ) {
         const params = {
             ...tx.sendParams,
             data: (tx.transaction as any).encodeABI(),
@@ -90,24 +62,10 @@ export class SimulationService implements ISimulationService {
                 params,
                 process.env.ETH_PRIVATE_KEY!
             );
-
-            return new Promise(async (resolve, reject) => {
-                try {
-                    await this.#web3Ganache.eth.sendSignedTransaction(signedTransaction.rawTransaction!)
-                        .on("transactionHash", (hash) => {
-                            resolve(hash);
-                        })
-                } catch (error) {
-
-                    const txFailure = new TransactionFailure((tx.transaction as any)._method.name, error);
-                    this.#txErrosWhenMinedBlock.push(txFailure);
-                }
-            });
-
+            await this.#web3Ganache.eth.sendSignedTransaction(signedTransaction.rawTransaction!);
         } catch (error) {
             throw new TransactionFailure((tx.transaction as any)._method.name, error);
         }
-
     }
 
 }
