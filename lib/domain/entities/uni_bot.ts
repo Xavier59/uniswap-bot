@@ -7,7 +7,7 @@ import { TransactionPairReserves } from "../value_types/transaction_pair_reserve
 import BN from "bignumber.js";
 import { ISimulationBoxBuilder } from "../factories/i_simulation_box_builder";
 import { ERC20Methods, ITransactionFactory, TransactionType, UniswapMethods } from "../factories/i_transaction_factory";
-import { MAX_ETH_INVEST, UNISWAP_CONTRACT_ADDR } from "../../config";
+import { CUSTOM_CONTRACT_ADDR, MAX_ETH_INVEST, UNISWAP_CONTRACT_ADDR } from "../../config";
 import { BuiltTransaction, BuiltTransactionReadyToSend } from "../value_types/built_transaction";
 import { TransactionFailure } from "../failures/transaction_failure";
 import { SimulationBox } from "./simulation_box";
@@ -106,7 +106,7 @@ export class UniBot {
                 const victimGasPrice = new BN(victimTx.gasPrice);
 
                 // Check if token has been approved yet
-                const transactions: Array<BuiltTransactionReadyToSend | RawTransaction> = []
+                const transactions: [(BuiltTransactionReadyToSend | RawTransaction)[], (BuiltTransactionReadyToSend | RawTransaction)[]] = [[], []];
                 const tokenIsApproved = await this.#tokenService.isApproved(tokenB);
 
                 if (tokenIsApproved === false) {
@@ -121,8 +121,10 @@ export class UniBot {
                         3
                     );
 
-                    // Add the approve tx to the list of transaction for the attack
-                    transactions.push(approveTransaction);
+                    // Add the approve tx for both the list of 
+                    // ganache and mainet txs
+                    transactions[0].push(approveTransaction);
+                    transactions[1].push(approveTransaction);
                 }
 
                 const sandwitchAttackTxs = this._buildTransactionsForSandwichAttack(
@@ -137,14 +139,16 @@ export class UniBot {
                 );
 
                 // Add all the transaction required by the attack
-                transactions.push(...sandwitchAttackTxs);
+                // on both txs list
+                transactions[0].push(...sandwitchAttackTxs[0]);
+                transactions[1].push(...sandwitchAttackTxs[1]);
 
                 // Simulate on ganache
                 const isWorth = await this._simulateSandwichAttackOnGanache(
                     victimTx.hash,
                     !tokenIsApproved,
                     rawVictimTx,
-                    transactions
+                    transactions[0]
                 );
 
                 if (this.#attackInProcess) {
@@ -159,7 +163,7 @@ export class UniBot {
                     // const voidOrTransactionFailure = await this.frontRun(
                     //     victimTx.hash,
                     //     blockNumber,
-                    //     transactions
+                    //     transactions[1]
                     // );
 
                     // if (voidOrTransactionFailure instanceof TransactionFailure) {
@@ -274,6 +278,8 @@ export class UniBot {
         };
     }
 
+    // Returns 2 list of tx, first for ganache (with timestamp)
+    // second for mainnet with our on custom contract
     private _buildTransactionsForSandwichAttack(
         nextBlockNumber: number,
         currentNonce: number,
@@ -283,16 +289,27 @@ export class UniBot {
         amountToInvest: string,
         amountTokenToBuy: string,
         amountOutMin: string,
-    ): [BuiltTransactionReadyToSend, BuiltTransactionReadyToSend] {
+    ): [[BuiltTransactionReadyToSend, BuiltTransactionReadyToSend], [BuiltTransactionReadyToSend, BuiltTransactionReadyToSend]] {
 
-        const buyTx = this.#transactionfactory.createUniswapTransaction(
+        const buyTxMainNet = this.#transactionfactory.createUniswapTransaction(
             TransactionType.onGanache,
             UniswapMethods.swapETHForExactTokens,
             [
                 amountTokenToBuy,                                           // amoutTokenOut
                 [tokenA, tokenB],                                           // Pair
                 process.env.ETH_PUBLIC_KEY,                                 // Wallet
-                Math.floor(new Date().getTime() / 1000) + 180                                             // Block number required for our custom contract
+                nextBlockNumber                                             // Block number required for our custom contract
+            ]
+        );
+
+        const buyTxGanache = this.#transactionfactory.createUniswapTransaction(
+            TransactionType.onGanache,
+            UniswapMethods.swapETHForExactTokens,
+            [
+                amountTokenToBuy,                                           // amoutTokenOut
+                [tokenA, tokenB],                                           // Pair
+                process.env.ETH_PUBLIC_KEY,                                 // Wallet
+                Math.floor(new Date().getTime() / 1000) + 180               // Normal required timestamp for Ganache
             ]
         );
 
@@ -308,28 +325,44 @@ export class UniBot {
             ]
         );
 
-        return [
-            {
-                transaction: buyTx,
-                sendParams: {
-                    from: process.env.ETH_PUBLIC_KEY!,
-                    gas: 250000,
-                    gasPrice: victimGasPrice.plus(victimGasPrice).toFixed(0, 1),
-                    value: amountToInvest,
-                    nonce: currentNonce + 1,
-                    to: UNISWAP_CONTRACT_ADDR,
-                }
-            },
-            {
-                transaction: sellTx,
-                sendParams: {
-                    from: process.env.ETH_PUBLIC_KEY!,
-                    gas: 250000,
-                    gasPrice: victimGasPrice,
-                    nonce: currentNonce + 2,
-                    to: UNISWAP_CONTRACT_ADDR,
-                }
+        let buyOnGanacheReadyTOSend = {
+            transaction: buyTxGanache,
+            sendParams: {
+                from: process.env.ETH_PUBLIC_KEY!,
+                gas: 250000,
+                gasPrice: victimGasPrice.plus(victimGasPrice).toFixed(0, 1),
+                value: amountToInvest,
+                nonce: currentNonce + 1,
+                to: UNISWAP_CONTRACT_ADDR,
             }
+        };
+
+        let buyOnMainNetReadyToSend = {
+            transaction: buyTxMainNet,
+            sendParams: {
+                from: process.env.ETH_PUBLIC_KEY!,
+                gas: 250000,
+                gasPrice: victimGasPrice.plus(victimGasPrice).toFixed(0, 1),
+                value: amountToInvest,
+                nonce: currentNonce + 1,
+                to: CUSTOM_CONTRACT_ADDR,
+            }
+        };
+
+        let sellReadyTOsend = {
+            transaction: sellTx,
+            sendParams: {
+                from: process.env.ETH_PUBLIC_KEY!,
+                gas: 250000,
+                gasPrice: victimGasPrice,
+                nonce: currentNonce + 2,
+                to: UNISWAP_CONTRACT_ADDR,
+            }
+        };
+
+        return [
+            [buyOnGanacheReadyTOSend, sellReadyTOsend],
+            [buyOnMainNetReadyToSend, sellReadyTOsend]
         ];
     }
 
