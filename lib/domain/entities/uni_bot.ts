@@ -160,32 +160,32 @@ export class UniBot {
                     return;
                 } else if (isWorth && this.#attackInProcess === false) {
                     this.#attackInProcess = true;
-                    // const voidOrTransactionFailure = await this.frontRun(
-                    //     victimTx.hash,
-                    //     blockNumber,
-                    //     transactions[1]
-                    // );
+                    const voidOrTransactionFailure = await this.frontRun(
+                        victimTx.hash,
+                        blockNumber,
+                        transactions[1]
+                    );
 
-                    // if (voidOrTransactionFailure instanceof TransactionFailure) {
-                    //     this.#loggerService.addErrorForTx(victimTx.hash, `Transaction failed on mainnet: ${voidOrTransactionFailure.toString()}`, 4);
+                    if (voidOrTransactionFailure instanceof TransactionFailure) {
+                        this.#loggerService.addErrorForTx(victimTx.hash, `Transaction failed on mainnet: ${voidOrTransactionFailure.toString()}`, 4);
 
-                    //     // if the approval transaction did not fail we need to update the db as well
-                    //     if (voidOrTransactionFailure.getMethod() !== "approve") {
-                    //         await this.#tokenService.approveToken(tokenB);
-                    //     }
+                        // if the approval transaction did not fail we need to update the db as well
+                        if (voidOrTransactionFailure.getMethod() !== "approve") {
+                            await this.#tokenService.approveToken(tokenB);
+                        }
 
-                    //     this.#loggerService.consumeLogsForTx(victimTx.hash);
-                    //     process.exit();
+                        this.#loggerService.consumeLogsForTx(victimTx.hash);
+                        process.exit();
 
-                    // } else {
-                    //     // if we sent an approve tx, add the token to the approved list on database
-                    //     if (tokenIsApproved == false) {
-                    //         await this.#tokenService.approveToken(tokenB);
-                    //     }
-                    // }
+                    } else {
+                        // if we sent an approve tx, add the token to the approved list on database
+                        if (tokenIsApproved == false) {
+                            await this.#tokenService.approveToken(tokenB);
+                        }
+                    }
 
-                    // // In all cases, update nonce
-                    // await this.#txService.updateNonce();
+                    // In all cases, update nonce
+                    await this.#txService.updateNonce();
 
                     // Free the "lock" lol
                     this.#attackInProcess = false;
@@ -291,17 +291,6 @@ export class UniBot {
         amountOutMin: string,
     ): [[BuiltTransactionReadyToSend, BuiltTransactionReadyToSend], [BuiltTransactionReadyToSend, BuiltTransactionReadyToSend]] {
 
-        const buyTxMainNet = this.#transactionfactory.createUniswapTransaction(
-            TransactionType.onGanache,
-            UniswapMethods.swapETHForExactTokens,
-            [
-                amountTokenToBuy,                                           // amoutTokenOut
-                [tokenA, tokenB],                                           // Pair
-                process.env.ETH_PUBLIC_KEY,                                 // Wallet
-                nextBlockNumber                                             // Block number required for our custom contract
-            ]
-        );
-
         const buyTxGanache = this.#transactionfactory.createUniswapTransaction(
             TransactionType.onGanache,
             UniswapMethods.swapETHForExactTokens,
@@ -313,7 +302,18 @@ export class UniBot {
             ]
         );
 
-        const sellTx = this.#transactionfactory.createUniswapTransaction(
+        const buyTxMainNet = this.#transactionfactory.createUniswapTransaction(
+            TransactionType.onMainNet,
+            UniswapMethods.swapETHForExactTokens,
+            [
+                amountTokenToBuy,                                           // amoutTokenOut
+                [tokenA, tokenB],                                           // Pair
+                process.env.ETH_PUBLIC_KEY,                                 // Wallet
+                nextBlockNumber                                             // Block number required for our custom contract
+            ]
+        );
+
+        const sellTxGanache = this.#transactionfactory.createUniswapTransaction(
             TransactionType.onGanache,
             UniswapMethods.swapExactTokensForETH,
             [
@@ -325,7 +325,19 @@ export class UniBot {
             ]
         );
 
-        let buyOnGanacheReadyTOSend = {
+        const sellTxMainNet = this.#transactionfactory.createUniswapTransaction(
+            TransactionType.onMainNet,
+            UniswapMethods.swapExactTokensForETH,
+            [
+                amountTokenToBuy,                                           // amountIn
+                new BN(amountOutMin).times("0.99").toFixed(0, 1),           // amountOutMin
+                [tokenB, tokenA],                                           // Pairs
+                process.env.ETH_PUBLIC_KEY,                                 // Wallet
+                Math.floor(new Date().getTime() / 1000) + 86400        // max timestamp for sell tx
+            ]
+        );
+
+        let buyOnGanacheReadyToSend = {
             transaction: buyTxGanache,
             sendParams: {
                 from: process.env.ETH_PUBLIC_KEY!,
@@ -343,14 +355,25 @@ export class UniBot {
                 from: process.env.ETH_PUBLIC_KEY!,
                 gas: 250000,
                 gasPrice: victimGasPrice.plus(victimGasPrice).toFixed(0, 1),
-                value: amountToInvest,
+                value: new BN(amountToInvest).times("1.01").toFixed(0, 1),
                 nonce: currentNonce + 1,
                 to: CUSTOM_CONTRACT_ADDR,
             }
         };
 
-        let sellReadyTOsend = {
-            transaction: sellTx,
+        let sellOnGanacheReadyTosend = {
+            transaction: sellTxGanache,
+            sendParams: {
+                from: process.env.ETH_PUBLIC_KEY!,
+                gas: 250000,
+                gasPrice: victimGasPrice,
+                nonce: currentNonce + 2,
+                to: UNISWAP_CONTRACT_ADDR,
+            }
+        };
+
+        let sellOnMainNetReadyTosend = {
+            transaction: sellTxMainNet,
             sendParams: {
                 from: process.env.ETH_PUBLIC_KEY!,
                 gas: 250000,
@@ -361,8 +384,8 @@ export class UniBot {
         };
 
         return [
-            [buyOnGanacheReadyTOSend, sellReadyTOsend],
-            [buyOnMainNetReadyToSend, sellReadyTOsend]
+            [buyOnGanacheReadyToSend, sellOnGanacheReadyTosend],
+            [buyOnMainNetReadyToSend, sellOnMainNetReadyTosend]
         ];
     }
 
